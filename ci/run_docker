@@ -22,6 +22,8 @@ case $1 in
 	hpccm --recipe=ci/recipe_dev.py | docker build -t $IMG_DEV -
 	hpccm --recipe=ci/recipe_lab.py > target/Dockerfile
         docker build -t $IMG_LAB -f target/Dockerfile .
+	hpccm --recipe=ci/recipe_lab.py --format singularity > target/Singularity
+	singularity build --fakeroot cpp_hpc_tutorial.simg target/Singularity
 	;;
     fmt)
 	docker run $DOCKER_CMDS bash -c "set -ex && ./ci/fmt"
