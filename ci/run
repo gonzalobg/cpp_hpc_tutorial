@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 set -ex
 
-DOCKER_IMG=cpp_hpc_tutorial:dev-latest
-SING_IMG=cpp_hpc_tutorial.simg
+DOCKER_IMG=stdpar_sc:dev-latest
+SING_IMG=stdpar_sc.simg
 
 PORT=8888
 
@@ -40,7 +40,7 @@ case $1 in
     docker-build)
 	rm -r target/ || true
 	mkdir -p target
-	hpccm --recipe=ci/recipe_dev.py | docker build -t $DOCKER_IMG -
+	hpccm --recipe=ci/recipe.py | docker build -t $DOCKER_IMG -
 	;;
     docker-serve-dev)
 	mkdir -p target/local
@@ -60,8 +60,8 @@ case $1 in
     singularity-build)
 	rm -r target/ || true
 	mkdir -p target
-	hpccm --recipe=ci/recipe_dev.py --format singularity > target/Singularity
-	singularity build --fakeroot cpp_hpc_tutorial.simg target/Singularity
+	hpccm --recipe=ci/recipe.py --format singularity > target/Singularity
+	singularity build --fakeroot stdpar_sc.simg target/Singularity
 	;;
     singularity-serve-dev)
 	singularity run ${SING_CMDS} ls
