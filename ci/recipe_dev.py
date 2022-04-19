@@ -55,3 +55,4 @@ Stage0 += environment(variables={
     'LD_LIBRARY_PATH':'/usr/lib/llvm-15/lib:$LD_LIBRARY_PATH',
     'LIBRARY_PATH':'/usr/lib/llvm-15/lib:$LIBRARY_PATH',
 })
+Stage0 += copy(src='labs/', dest='/labs/')

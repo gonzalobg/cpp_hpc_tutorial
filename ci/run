@@ -31,7 +31,7 @@ RUN_LAB="jupyter-lab \
 --allow-root \
 --ip=0.0.0.0 \
 --port=${PORT} \
---NotebookApp.token="" \
+--NotebookApp.token='' \
 --NotebookApp.password='' \
 --notebook-dir=/src/labs"
 
@@ -48,7 +48,7 @@ case $1 in
 	       -p ${PORT}:8888 \
 	       -v "$(pwd)/target/local":"/.local" \
 	       $DOCKER_CMDS \
-	       bash -c $RUN_LAB
+	       bash -c "$RUN_LAB"
 	;;
     it)
 	docker run -it $DOCKER_CMDS bash
@@ -65,13 +65,10 @@ case $1 in
 	;;
     singularity-serve-dev)
 	singularity run ${SING_CMDS} ls
-	singularity run ${SING_CMDS} $RUN_LAB
+	singularity run ${SING_CMDS} "$RUN_LAB"
 	exit 1
 	;;
     *)
 	exit 1
 	;;
 esac
-
-
-#
