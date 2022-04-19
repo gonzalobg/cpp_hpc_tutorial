@@ -1,0 +1,128 @@
+#!/usr/bin/env sh
+#
+# ./ci/compile [compiler] [mode]
+set -e
+hlp="./ci/compile <compiler> <mode> <mpi> <std> <path>\n  compilers: g++,clang++,nvc++\n  mode: debug,release,*-nomanaged\n mpi: 0|1\n std: 17|20"
+
+CXX=$1
+mode=$2
+mpi=$3
+std=$4
+path=$5
+
+IFLAGS="\
+-Iinclude/ \
+-isystem/usr/local/range-v3/include \
+-isystem/usr/local/execution/include \
+-isystem/usr/local/execution/examples \
+-isystem/opt/nvidia/hpc_sdk/Linux_x86_64/2022/cuda/include \
+"
+CXXFLAGS="-std=c++${std} ${IFLAGS}"
+
+case $CXX in
+    nvc++)
+	LFLAGS="-lpthread -ldl"
+	CXXFLAGS="${CXXFLAGS} --display_error_number --diag_suppress 186"
+	case $mode in
+	    release)
+		CXXFLAGS="${CXXFLAGS} -stdpar=gpu -fast -Mllvm-fast -DNDEBUG -gpu=managed,fastmath,fma"
+		;;
+	    release-cpu)
+		CXXFLAGS="${CXXFLAGS} -stdpar=multicore -fast -Mllvm-fast -DNDEBUG"
+		;;
+	    release-nomanaged)
+		CXXFLAGS="${CXXFLAGS} -stdpar=gpu -fast -Mllvm-fast -DNDEBUG -gpu=nomanaged,fastmath,fma -DCUDA_ALLOC "
+		;;
+	    debug)
+		CXXFLAGS="${CXXFLAGS} -stdpar=gpu -gpu=debug -O0"
+		;;
+	    debug-nomanaged)
+		CXXFLAGS="${CXXFLAGS} -stdpar=gpu -O0 -g -Mdwarf3 -gpu=nomanaged,debug -DCUDA_ALLOC"
+		;;
+	    *)
+		echo "Unknown mode: ${2}"
+		echo $hlp
+		exit 1
+		;;
+	esac
+	;;
+    g++)
+	LFLAGS="-lpthread -ldl -ltbb"
+	case $mode in
+	    release*)
+		CXXFLAGS="${CXXFLAGS} -Ofast -DNDEBUG"
+		;;
+	    debug*)
+		CXXFLAGS="${CXXFLAGS} -O0 -g3"
+		;;
+	    *)
+		echo "Unknown mode: ${2}"
+		echo $hlp
+		exit 1
+		;;
+	esac
+	;;
+    clang++)
+	LFLAGS="-lpthread -ldl -ltbb"
+	case $mode in
+	    release-libcxx)
+		CXXFLAGS="${CXXFLAGS} -Ofast -DNDEBUG -stdlib=libc++"
+		;;
+	    debug-libcxx)
+		CXXFLAGS="${CXXFLAGS} -O0 -g3 -stdlib=libc++"
+		;;
+	    release*)
+		CXXFLAGS="${CXXFLAGS} -Ofast -DNDEBUG"
+		;;
+	    debug*)
+		CXXFLAGS="${CXXFLAGS} -O0 -g3"
+		;;
+	    *)
+		echo "Unknown mode: ${2}"
+		echo $hlp
+		exit 1
+		;;
+	esac
+	;;
+    *)
+	echo "Unknown compiler: ${1}"
+	echo $help
+	exit 1
+	;;
+esac
+
+CMD=$CXX
+case $mpi in
+    0)
+        ;;
+    1)
+	CMD="OMPI_CXX=$CXX mpicxx"
+	;;
+    *)
+	echo "mpi value must be 0 or 1"
+	echo "$help"
+	exit 1
+	;;
+esac
+
+case $std in
+    17|20)
+        ;;
+    *)
+	echo "The C++ std must be 17 or 20"
+	echo "$help"
+	exit 1
+	;;
+esac
+
+if [ -z $path ]; then
+    echo "path: $path not set"
+    echo "$help"
+    exit 1
+fi
+
+rm -r target || true
+mkdir -p target/$(dirname $path)
+
+echo "$CXX $CXXFLAGS $path -o target/$path $LFLAGS"
+$CXX $CXXFLAGS $path -o target/$path $LFLAGS

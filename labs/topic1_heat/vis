@@ -1,0 +1,34 @@
+#!/usr/bin/env python
+
+import argparse
+import numpy as np
+import matplotlib.pyplot as plt
+
+parser = argparse.ArgumentParser(description='Visualize a binary file.')
+parser.add_argument('file', type=argparse.FileType('rb'))
+args = parser.parse_args()
+
+def visualize(f):
+    grid = np.fromfile(f, dtype=np.uint64, count=2, offset=0)
+
+    nx = grid[0]
+    ny = grid[1]
+
+    times = np.fromfile(f, dtype=np.float64, count=1, offset=0)
+    time = times[0]
+
+    values = np.fromfile(f, dtype=np.float64, offset=0)
+    assert len(values) == nx * ny, f'{len(values)} != {nx * ny}'
+    values = values.reshape((nx, ny))
+
+    print(f'Plotting grid {nx}x{ny}, t = {time}')
+
+    plt.title(f'Temperature at t = {time:.3f} [s]')
+    plt.xlabel('x')
+    plt.ylabel('y')
+    plt.pcolormesh(values, cmap=plt.cm.jet, vmin=0, vmax=values.max())
+    plt.colorbar()
+
+
+visualize(args.file)
+plt.savefig("heat_equation.png")
