@@ -1,0 +1,77 @@
+#!/usr/bin/env sh
+set -ex
+
+DOCKER_IMG=cpp_hpc_tutorial:dev-latest
+SING_IMG=cpp_hpc_tutorial.simg
+
+PORT=8888
+
+DOCKER_CMDS="\
+  --gpus=all \
+  -u $(id -u):$(id -g) \
+  -h $(hostname) \
+  -v $(pwd):/src \
+  -v $(pwd)/conan:/.conan \
+  -w /src \
+  $DOCKER_IMG \
+"
+
+SING_CMDS="\
+  --nv \
+  --hostname=$(hostname) \
+  --cleanenv \
+  -B $(pwd):/src \
+  -B $(pwd)/conan:/.conan \
+  --pwd /src \
+  ${SING_IMG} \
+"
+
+RUN_LAB="jupyter-lab \
+--no-browser \
+--allow-root \
+--ip=0.0.0.0 \
+--port=${PORT} \
+--NotebookApp.token="" \
+--NotebookApp.password='' \
+--notebook-dir=/src/labs"
+
+case $1 in
+    # Docker:
+    docker-build)
+	rm -r target/ || true
+	mkdir -p target
+	hpccm --recipe=ci/recipe_dev.py | docker build -t $DOCKER_IMG -
+	;;
+    docker-serve-dev)
+	mkdir -p target/local
+	docker run \
+	       -p ${PORT}:8888 \
+	       -v "$(pwd)/target/local":"/.local" \
+	       $DOCKER_CMDS \
+	       bash -c $RUN_LAB
+	;;
+    it)
+	docker run -it $DOCKER_CMDS bash
+	;;
+    fmt)
+	docker run $DOCKER_CMDS bash -c "set -ex && ./ci/fmt"
+	;;
+    # Singularity
+    singularity-build)
+	rm -r target/ || true
+	mkdir -p target
+	hpccm --recipe=ci/recipe_dev.py --format singularity > target/Singularity
+	singularity build --fakeroot cpp_hpc_tutorial.simg target/Singularity
+	;;
+    singularity-serve-dev)
+	singularity run ${SING_CMDS} ls
+	singularity run ${SING_CMDS} $RUN_LAB
+	exit 1
+	;;
+    *)
+	exit 1
+	;;
+esac
+
+
+#

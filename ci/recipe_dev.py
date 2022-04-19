@@ -39,10 +39,12 @@ Stage0 += shell(commands=[
     'cd /var/tmp',
     'git clone https://github.com/ericniebler/range-v3.git',
     'cp -r range-v3 /usr/local/range-v3',
+    'rm -rf range-v3',
     'git clone https://github.com/brycelelbach/wg21_p2300_std_execution.git',
     'cp -r wg21_p2300_std_execution /usr/local/execution',
+    'rm -rf wg21_p2300_std_execution',
     'cd -',
-    'rm -rf /var/tmp',
+    
 ])
 
 # libc++abi : make sure clang with -stdlib=libc++ can find it
