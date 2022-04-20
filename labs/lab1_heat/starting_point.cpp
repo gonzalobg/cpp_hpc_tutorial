@@ -126,7 +126,8 @@ double prev_boundary(double *u_new, double *u_old, parameters p) {
     // Receive top boundary from bottom rank
     MPI_Recv(u_old + 0, p.ny, MPI_DOUBLE, p.rank - 1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   }
-  grid g{.x_start = p.nx, .x_end = p.nx + 1, .y_start = 1, .y_end = p.ny - 1};
+  // Compute prev boundary
+  grid g{.x_start = 1, .x_end = 2, .y_start = 1, .y_end = p.ny - 1};
   return stencil(u_new, u_old, g, p);
 }
 
@@ -138,7 +139,8 @@ double next_boundary(double *u_new, double *u_old, parameters p) {
     // Send top boundary to top rank, and
     MPI_Send(u_old + p.nx * p.ny, p.ny, MPI_DOUBLE, p.rank + 1, 1, MPI_COMM_WORLD);
   }
-  grid g{.x_start = 1, .x_end = 2, .y_start = 1, .y_end = p.ny - 1};
+  // Compute next boundary
+  grid g{.x_start = p.nx, .x_end = p.nx + 1, .y_start = 1, .y_end = p.ny - 1};
   return stencil(u_new, u_old, g, p);
 }
 

@@ -8,6 +8,8 @@ compilers="nvc++ g++ clang++"
 modes="release release-cpu"
 stds="17 20"
 
+
+
 # Lab 0: DAXPY: compile and run full solutions
 files="lab0_daxpy/starting_point.cpp lab0_daxpy/solutions/exercise0.cpp lab0_daxpy/solutions/exercise1.cpp lab0_daxpy/solutions/exercise1_indices.cpp lab0_daxpy/solutions/exercise2.cpp"
 echo "${compilers}" | tr ' ' '\n' | while read compiler; do

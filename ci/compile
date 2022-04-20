@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 #
 # ./ci/compile [compiler] [mode]
-set -ex
+set -e
 hlp="./ci/compile <compiler> <mode> <mpi> <std> <path>\n  compilers: g++,clang++,nvc++\n  mode: debug,release,*-nomanaged\n mpi: 0|1\n std: 17|20"
 
 CXX=$1
