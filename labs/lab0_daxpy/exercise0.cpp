@@ -22,13 +22,12 @@
  */
 
 #include <cassert>
+#include <chrono>
 #include <iostream>
 #include <limits>
 #include <string>
 #include <vector>
-#include <chrono>
-// DONE: add C++ standard library includes as necessary
-#include <algorithm>
+// TODO: add C++ standard library includes as necessary
 
 // Initialize vectors
 void initialize(std::vector<double> &x, std::vector<double> &y);
@@ -76,7 +75,7 @@ int main(int argc, char *argv[]) {
   // Amount of bytes transferred from/to chip.
   // x is read, y is read and written:
   auto gigabytes = 3. * (double)x.size() * (double)sizeof(double) * (double)nit * 1.e-9; // GB
-  std::cerr << "Bandwidth [GB/s]: " << (gigabytes/seconds) << std::endl;
+  std::cerr << "Bandwidth [GB/s]: " << (gigabytes / seconds) << std::endl;
 
   return 0;
 }
@@ -101,8 +100,6 @@ void initialize(std::vector<double> &x, std::vector<double> &y) {
 
 void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
   assert(x.size() == y.size());
-  // DONE: Implement using the C++ Standard Template Library algorithms
-  std::transform(x.begin(), x.end(), y.begin(), y.begin(), [&](double x, double y) {
-    return a * x + y;
-  });
+  // TODO: Implement using the C++ Standard Template Library algorithms
+  // ...
 }

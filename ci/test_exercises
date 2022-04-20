@@ -5,28 +5,14 @@
 set -e
 
 compilers="nvc++ g++ clang++"
-modes="release release-cpu debug"
+modes="release release-cpu"
 stds="17 20"
 
-# Topic 1: Heat equation
-daxpy="topic1_heat/starting_point.cpp"
+# Lab 0: DAXPY: compile and run full solutions
+files="lab0_daxpy/starting_point.cpp lab0_daxpy/solutions/exercise0.cpp lab0_daxpy/solutions/exercise1.cpp lab0_daxpy/solutions/exercise1_indices.cpp lab0_daxpy/solutions/exercise2.cpp"
 echo "${compilers}" | tr ' ' '\n' | while read compiler; do
     echo "${modes}" | tr ' ' '\n' | while read mode; do
-	echo "${stds}" | tr ' ' '\n' | while read std; do	
-	    echo "${daxpy}" | tr ' ' '\n' | while read file; do
-		./ci/compile ${compiler} ${mode} 0 ${std} labs/${file}
-		echo "./target/labs/${file} 2048 1024"
-		./target/labs/${file} 2048 1024
-	    done
-	done
-    done
-done
-
-# Topic 0: DAXPY: compile and run full solutions
-files="topic0_daxpy/starting_point.cpp topic0_daxpy/solutions/exercise0.cpp topic0_daxpy/solutions/exercise0_indices.cpp topic0_daxpy/solutions/exercise1.cpp"
-echo "${compilers}" | tr ' ' '\n' | while read compiler; do
-    echo "${modes}" | tr ' ' '\n' | while read mode; do
-	echo "${stds}" | tr ' ' '\n' | while read std; do	
+	echo "${stds}" | tr ' ' '\n' | while read std; do
 	    echo "${files}" | tr ' ' '\n' | while read file; do
 		./ci/compile ${compiler} ${mode} 0 ${std} labs/${file}
 		echo "./target/labs/${file} 100"
@@ -36,11 +22,11 @@ echo "${compilers}" | tr ' ' '\n' | while read compiler; do
     done
 done
 
-# Topic 0: DAXPY: compile partial solutions
-files="topic0_daxpy/exercise0.cpp topic0_daxpy/exercise1.cpp"
+# Lab 0: DAXPY: compile partial solutions
+files="lab0_daxpy/exercise0.cpp lab0_daxpy/exercise1.cpp lab0_daxpy/exercise2.cpp"
 echo "${compilers}" | tr ' ' '\n' | while read compiler; do
     echo "${modes}" | tr ' ' '\n' | while read mode; do
-	echo "${stds}" | tr ' ' '\n' | while read std; do		
+	echo "${stds}" | tr ' ' '\n' | while read std; do
 	    echo "${files}" | tr ' ' '\n' | while read file; do
 		./ci/compile ${compiler} ${mode} 0 ${std} labs/${file}
 	    done
@@ -48,37 +34,103 @@ echo "${compilers}" | tr ' ' '\n' | while read compiler; do
     done
 done
 
+# Lab 1: Heat equation (no MPI): compile and run full solutions
+daxpy="lab1_heat/starting_point.cpp lab1_heat/solutions/exercise0.cpp lab1_heat/solutions/exercise1.cpp"
+echo "${compilers}" | tr ' ' '\n' | while read compiler; do
+    echo "${modes}" | tr ' ' '\n' | while read mode; do
+	echo "${stds}" | tr ' ' '\n' | while read std; do
+	    echo "${daxpy}" | tr ' ' '\n' | while read file; do
+		if  [ "${compiler}" = "nvc++" ] && [ "${file}" = "lab1_heat/solutions/exercise1.cpp" ] ; then
+		    # TODO: range-v3 view::cartesian_product not supported by nvc++ yet
+		    continue
+		else
+		    ./ci/compile ${compiler} ${mode} 0 ${std} labs/${file}
+		    echo "./target/labs/${file} 2048 1024 100"
+		    ./target/labs/${file} 2048 1024 100
+		fi
+	    done
+	done
+    done
+done
 
-# Topic 2: Tree
-tree="topic2_tree/starting_point.cpp topic2_tree/solutions/exercise0.cpp topic2_tree/solutions/exercise0_gpu.cpp"
-if [ ! -d topic2_dataset ]; then
-    mkdir -p topic2_dataset
+# Lab 1: Heat equation (no MPI): compile partial solutions
+daxpy="lab1_heat/starting_point.cpp lab1_heat/exercise0.cpp lab1_heat/exercise1.cpp"
+echo "${compilers}" | tr ' ' '\n' | while read compiler; do
+    echo "${modes}" | tr ' ' '\n' | while read mode; do
+	echo "${stds}" | tr ' ' '\n' | while read std; do
+	    echo "${daxpy}" | tr ' ' '\n' | while read file; do
+		if  [ "${compiler}" = "nvc++" ] && [ "${file}" = "lab1_heat/exercise1.cpp" ] ; then
+		    # TODO: range-v3 view::cartesian_product not supported by nvc++ yet
+		    continue
+		else
+		    ./ci/compile ${compiler} ${mode} 0 ${std} labs/${file}
+		    echo "./target/labs/${file} 2048 1024"
+		    ./target/labs/${file} 2048 1024 100
+		fi
+	    done
+	done
+    done
+done
+
+# Lab 1: Heat equation (MPI): compile and run full solutions
+daxpy="lab1_heat/starting_point_mpi.cpp lab1_heat/solutions/exercise2.cpp"
+echo "${compilers}" | tr ' ' '\n' | while read compiler; do
+    echo "${modes}" | tr ' ' '\n' | while read mode; do
+	echo "${stds}" | tr ' ' '\n' | while read std; do
+	    echo "${daxpy}" | tr ' ' '\n' | while read file; do
+		./ci/compile ${compiler} ${mode} 1 ${std} labs/${file}
+		echo "./target/labs/${file} 2048 1024 100"
+		OMPI_MCA_coll_hcoll_enable=0 mpirun --oversubscribe --allow-run-as-root -np 2 ./target/labs/${file} 2048 1024 100
+	    done
+	done
+    done
+done
+
+# Lab 1: Heat equation (MPI): compile partial solutions
+daxpy="lab1_heat/starting_point_mpi.cpp lab1_heat/solutions/exercise2.cpp"
+echo "${compilers}" | tr ' ' '\n' | while read compiler; do
+    echo "${modes}" | tr ' ' '\n' | while read mode; do
+	echo "${stds}" | tr ' ' '\n' | while read std; do
+	    echo "${daxpy}" | tr ' ' '\n' | while read file; do
+		./ci/compile ${compiler} ${mode} 1 ${std} labs/${file}
+	    done
+	done
+    done
+done
+
+
+
+
+# Lab 2: Tree
+tree="lab2_tree/starting_point.cpp lab2_tree/solutions/exercise0.cpp lab2_tree/solutions/exercise0_gpu.cpp"
+if [ ! -d lab2_dataset ]; then
+    mkdir -p lab2_dataset
     (
-	cd topic2_dataset
-	./../labs/topic2_tree/books.sh
+	cd lab2_dataset
+	./../labs/lab2_tree/books.sh
     )
 fi
 echo "${compilers}" | tr ' ' '\n' | while read compiler; do
     echo "${modes}" | tr ' ' '\n' | while read mode; do
 	echo "${tree}" | tr ' ' '\n' | while read file; do
-	    if [ "${mode}" = "release" ] || [ "${mode}" = "debug" ] && [ "${compiler}" = "nvc++" ] && [ "${file}" = "topic2_tree/solutions/exercise0.cpp" ] ; then
+	    if [ "${mode}" = "release" ] || [ "${mode}" = "debug" ] && [ "${compiler}" = "nvc++" ] && [ "${file}" = "lab2_tree/solutions/exercise0.cpp" ] ; then
 		continue
 	    elif [ "${mode}" = "debug" ] && [ "${compiler}" = "nvc++" ] ; then
-		continue		
-	    elif [ "${compiler}" = "nvc++" ] && [ "${file}" = "topic2_tree/solutions/exercise0_gpu.cpp" ] ; then
+		continue
+	    elif [ "${compiler}" = "nvc++" ] && [ "${file}" = "lab2_tree/solutions/exercise0_gpu.cpp" ] ; then
 		./ci/compile ${compiler} ${mode} 0 17 labs/${file}
 		echo "./target/labs/${file}"
-		cp ./target/labs/${file} topic2_dataset/tree_bin
+		cp ./target/labs/${file} lab2_dataset/tree_bin
 		(
-		    cd topic2_dataset
+		    cd lab2_dataset
 		    ./tree_bin
 		)
 	    else
 		./ci/compile ${compiler} ${mode} 0 20 labs/${file}
 		echo "./target/labs/${file}"
-		cp ./target/labs/${file} topic2_dataset/tree_bin
+		cp ./target/labs/${file} lab2_dataset/tree_bin
 		(
-		    cd topic2_dataset
+		    cd lab2_dataset
 		    ./tree_bin
 		)
 	    fi
@@ -86,8 +138,8 @@ echo "${compilers}" | tr ' ' '\n' | while read compiler; do
     done
 done
 
-# Topic 2: Tree: compile partial solution
-files="topic2_tree/exercise0.cpp"
+# Lab 2: Tree: compile partial solution
+files="lab2_tree/exercise0.cpp"
 echo "${compilers}" | tr ' ' '\n' | while read compiler; do
     echo "${modes}" | tr ' ' '\n' | while read mode; do
 	echo "${files}" | tr ' ' '\n' | while read file; do

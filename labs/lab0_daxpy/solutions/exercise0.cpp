@@ -22,22 +22,13 @@
  */
 
 #include <cassert>
+#include <chrono>
 #include <iostream>
 #include <limits>
 #include <string>
 #include <vector>
-#include <chrono>
+// DONE: add C++ standard library includes as necessary
 #include <algorithm>
-#if defined(__clang__)
-  // clang does not support libstdc++ ranges
-  #include <range/v3/all.hpp>
-  namespace views = ranges::views;
-#elif __cplusplus >= 202002L
-  #include <ranges>
-  namespace views = std::views;
-  namespace ranges = std::ranges;
-#endif
-// TODO: add C++ standard library includes as necessary
 
 // Initialize vectors
 void initialize(std::vector<double> &x, std::vector<double> &y);
@@ -75,7 +66,7 @@ int main(int argc, char *argv[]) {
 
   // Measure bandwidth in [GB/s]
   using clk_t = std::chrono::steady_clock;
-  daxpy(a, x, y);  
+  daxpy(a, x, y);
   auto start = clk_t::now();
   int nit = 100;
   for (int it = 0; it < nit; ++it) {
@@ -85,7 +76,7 @@ int main(int argc, char *argv[]) {
   // Amount of bytes transferred from/to chip.
   // x is read, y is read and written:
   auto gigabytes = 3. * (double)x.size() * (double)sizeof(double) * (double)nit * 1.e-9; // GB
-  std::cerr << "Bandwidth [GB/s]: " << (gigabytes/seconds) << std::endl;
+  std::cerr << "Bandwidth [GB/s]: " << (gigabytes / seconds) << std::endl;
 
   return 0;
 }
@@ -102,12 +93,15 @@ bool check(double a, std::vector<double> const &y) {
 
 void initialize(std::vector<double> &x, std::vector<double> &y) {
   assert(x.size() == y.size());
-  // TODO: Implement using the C++ parallel Standard Template Library algorithms
-  // ...
+  for (std::size_t i = 0; i < x.size(); ++i) {
+    x[i] = (double)i;
+    y[i] = 2.;
+  }
 }
 
 void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
   assert(x.size() == y.size());
-  // TODO: Implement using the C++ parallel Standard Template Library algorithms
-  // ...
+  // DONE: Implement using the C++ Standard Template Library algorithms
+  std::transform(x.begin(), x.end(), y.begin(), y.begin(),
+                 [&](double x, double y) { return a * x + y; });
 }

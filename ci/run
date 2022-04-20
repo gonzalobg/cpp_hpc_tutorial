@@ -33,6 +33,7 @@ RUN_LAB="jupyter-lab \
 --port=${PORT} \
 --NotebookApp.token='' \
 --NotebookApp.password='' \
+--FileContentsManager.checkpoints_kwargs='root_dir'=/tmp \
 --notebook-dir=/src/labs"
 
 case $1 in
@@ -40,9 +41,10 @@ case $1 in
     docker-build)
 	rm -r target/ || true
 	mkdir -p target
-	hpccm --recipe=ci/recipe.py | docker build -t $DOCKER_IMG -
+	hpccm --recipe=ci/recipe.py > target/Dockerfile
+        docker build -t ${DOCKER_IMG} -f target/Dockerfile .
 	;;
-    docker-serve-dev)
+    docker-serve)
 	mkdir -p target/local
 	docker run \
 	       -p ${PORT}:8888 \
@@ -63,12 +65,13 @@ case $1 in
 	hpccm --recipe=ci/recipe.py --format singularity > target/Singularity
 	singularity build --fakeroot stdpar_sc.simg target/Singularity
 	;;
-    singularity-serve-dev)
+    singularity-serve)
 	singularity run ${SING_CMDS} ls
 	singularity run ${SING_CMDS} "$RUN_LAB"
 	exit 1
 	;;
     *)
+	docker run -it $DOCKER_CMDS bash -c "set -ex && ./ci/test_exercises"
 	exit 1
 	;;
 esac

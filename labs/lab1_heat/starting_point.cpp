@@ -23,15 +23,11 @@
 
 //! Solves heat equation in 2D, see the README.
 
-#include <chrono>
-#include <memory>
-#include <iostream>
 #include <cassert>
+#include <chrono>
 #include <fstream>
-// TODO: will need some new includes here
-// For views::cartesian_product we need to use range-v3 until C++23
-#include <range/v3/all.hpp>
-namespace views = ranges::views;
+#include <iostream>
+#include <vector>
 
 // Problem parameters
 struct parameters {
@@ -39,7 +35,7 @@ struct parameters {
   long nx, ny, ni;
   int rank = 0, nranks = 1;
 
-  static constexpr double alpha() { return 1.0; }  // Thermal diffusivity
+  static constexpr double alpha() { return 1.0; } // Thermal diffusivity
 
   parameters(int argc, char *argv[]) {
     if (argc != 4) {
@@ -63,9 +59,9 @@ struct parameters {
 
 // Index into the memory using row-major order:
 long index(long x, long y, parameters p) {
-    assert(x >= 0 && x < p.nx);
-    assert(y >= 0 && y < p.ny);
-    return x * p.ny + y;
+  assert(x >= 0 && x < p.nx);
+  assert(y >= 0 && y < p.ny);
+  return x * p.ny + y;
 };
 
 // Finite-difference stencil
@@ -86,10 +82,11 @@ double stencil(double *u_new, double *u_old, long x, long y, parameters p) {
     u_old[idx(x + 1, y)] = 0;
   }
 
-  u_new[idx(x, y)] = (1. - 4. * p.gamma()) * u_old[idx(x, y)] + p.gamma() * (u_old[idx(x + 1, y)] + u_old[idx(x - 1, y)] + u_old[idx(x, y + 1)] +
-                                u_old[idx(x, y - 1)]);
+  u_new[idx(x, y)] = (1. - 4. * p.gamma()) * u_old[idx(x, y)] +
+                     p.gamma() * (u_old[idx(x + 1, y)] + u_old[idx(x - 1, y)] +
+                                  u_old[idx(x, y + 1)] + u_old[idx(x, y - 1)]);
 
-  return 0.5 * u_new[idx(x, y)] * u_new[idx(x, y)] * p.dx * p.dx;
+  return u_new[idx(x, y)] * p.dx * p.dx;
 }
 
 // 2D grid of indicies
@@ -99,12 +96,12 @@ struct grid {
 
 double stencil(double *u_new, double *u_old, grid g, parameters p) {
   double energy = 0.;
-  // TODO: implement using parallel algorithms
+  for (long x = g.x_start; x < g.x_end; ++x) {
+    for (long y = g.y_start; y < g.y_end; ++y) {
+      energy += stencil(u_new, u_old, x, y, p);
+    }
+  }
   return energy;
-}
-
-void initialize(double *u_new, double *u_old, long n) {
-   // TODO: implement initialization using parallel algorithms   
 }
 
 int main(int argc, char *argv[]) {
@@ -113,19 +110,22 @@ int main(int argc, char *argv[]) {
 
   // Allocate memory
   long n = p.nx * p.ny;
-  auto u_new = std::make_unique<double[]>(n);
-  auto u_old = std::make_unique<double[]>(n);
+  auto u_new = std::vector<double>(n);
+  auto u_old = std::vector<double>(n);
 
   // Initial condition
-  initialize(u_new.get(), u_old.get(), n);
+  for (long i = 0; i < n; ++i) {
+    u_old[i] = 0.;
+    u_new[i] = 0.;
+  }
 
   // Time loop
   using clk_t = std::chrono::steady_clock;
   auto start = clk_t::now();
 
   for (long it = 0; it < p.nit(); ++it) {
-    grid g { .x_start = 1, .x_end = p.nx - 1, .y_start = 1, .y_end = p.ny - 1 };
-    double energy = stencil(u_new.get(), u_old.get(), g, p);
+    grid g{.x_start = 1, .x_end = p.nx - 1, .y_start = 1, .y_end = p.ny - 1};
+    double energy = stencil(u_new.data(), u_old.data(), g, p);
     if (it % p.nout() == 0) {
       std::cerr << "E(t=" << it * p.dt << ") = " << energy << std::endl;
     }
@@ -134,11 +134,12 @@ int main(int argc, char *argv[]) {
 
   auto time = std::chrono::duration<double>(clk_t::now() - start).count();
   auto grid_size = static_cast<double>(p.nx * p.ny * sizeof(double) * 2) / 1e9; // GB
-  auto memory_bw = grid_size * static_cast<double>(p.nit()) / time; // GB/s
+  auto memory_bw = grid_size * static_cast<double>(p.nit()) / time;             // GB/s
   if (p.rank == 0) {
-    std::cerr << "Domain " << p.nx << "x" << p.ny << " (" << grid_size << " GB): " << memory_bw << " GB/s" << std::endl;
+    std::cerr << "Domain " << p.nx << "x" << p.ny << " (" << grid_size << " GB): " << memory_bw
+              << " GB/s" << std::endl;
   }
-  
+
   // Write output to file
   std::ios_base::sync_with_stdio(false);
   auto f = std::fstream("output", std::ios::out | std::ios::binary | std::ios::trunc);
@@ -146,7 +147,7 @@ int main(int argc, char *argv[]) {
   f.write((char *)&p.ny, sizeof(long));
   double end_time = p.nit() * p.dt;
   f.write((char *)&end_time, sizeof(double));
-  f.write((char *)u_new.get(), sizeof(double) * p.nx * p.ny);
+  f.write((char *)u_new.data(), sizeof(double) * p.nx * p.ny);
   f.flush();
   f.close();
 

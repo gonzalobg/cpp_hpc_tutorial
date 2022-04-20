@@ -12,16 +12,18 @@ pip3 install --user hpccm
 PATH=$PYTHONPATH:$PATH
 ```
 
+To build the container and start the Jupter notebook webserver locally here are the instructions for `Docker` and `Singularity`.
+
 ### Docker
 
 ```shell
 ./ci/run docker-build
-./ci/run docker-serve-dev
+./ci/run docker-serve
 ```
 
 ### Singularity
 
 ```shell
 ./ci/run singularity-build
-./ci/run singularity-serve-dev
+./ci/run singularity-serve
 ```

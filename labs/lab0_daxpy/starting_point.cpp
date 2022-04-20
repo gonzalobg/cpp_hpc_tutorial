@@ -22,22 +22,11 @@
  */
 
 #include <cassert>
+#include <chrono>
 #include <iostream>
 #include <limits>
 #include <string>
 #include <vector>
-#include <chrono>
-// DONE: add C++ standard library includes as necessary
-#include <algorithm>
-#if defined(__clang__)
-  // clang does not support libstdc++ ranges
-  #include <range/v3/all.hpp>
-  namespace views = ranges::views;
-#elif __cplusplus >= 202002L
-  #include <ranges>
-  namespace views = std::views;
-  namespace ranges = std::ranges;
-#endif
 
 // Initialize vectors
 void initialize(std::vector<double> &x, std::vector<double> &y);
@@ -85,7 +74,7 @@ int main(int argc, char *argv[]) {
   // Amount of bytes transferred from/to chip.
   // x is read, y is read and written:
   auto gigabytes = 3. * (double)x.size() * (double)sizeof(double) * (double)nit * 1.e-9; // GB
-  std::cerr << "Bandwidth [GB/s]: " << (gigabytes/seconds) << std::endl;
+  std::cerr << "Bandwidth [GB/s]: " << (gigabytes / seconds) << std::endl;
 
   return 0;
 }
@@ -102,30 +91,15 @@ bool check(double a, std::vector<double> const &y) {
 
 void initialize(std::vector<double> &x, std::vector<double> &y) {
   assert(x.size() == y.size());
-  // DONE: Implement using the C++ Standard Template Library range algorithms
-#if __cplusplus >= 202002L
-  // In C++20 or newer we can just use ranges:
-  auto ints = views::iota(0, (int)x.size());
-  // Note: there is no <ranges> version of the parallel algorithms in standard C++ yet
-  // so we need to use the iterator-based versions. Notice that ranges provide iterators:
-  std::transform(ints.begin(), ints.end(), x.begin(),
-                 [](auto v) { return (double)v; });
-  std::fill(y.begin(), y.end(), 2.0);
-#else
-  // In C++17 we can either use range-v3, or compute indices from the pointers:
-  std::transform(x.begin(), x.end(), x.begin(),
-                 [x = x.data()](double const &v) {
-                   int index = &v - x; // obtain index of element
-                   return (double)index;
-                 });
-  std::fill(y.begin(), y.end(), 2.0);
-#endif
+  for (std::size_t i = 0; i < x.size(); ++i) {
+    x[i] = (double)i;
+    y[i] = 2.;
+  }
 }
 
 void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
   assert(x.size() == y.size());
-  // DONE: Implement using the C++ Standard Template Library algorithms
-  std::transform(x.begin(), x.end(), y.begin(), y.begin(), [&](double x, double y) {
-    return a * x + y;
-  });
+  for (std::size_t i = 0; i < y.size(); ++i) {
+    y[i] += a * x[i];
+  }
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 #
 # ./ci/compile [compiler] [mode]
-set -e
+set -ex
 hlp="./ci/compile <compiler> <mode> <mpi> <std> <path>\n  compilers: g++,clang++,nvc++\n  mode: debug,release,*-nomanaged\n mpi: 0|1\n std: 17|20"
 
 CXX=$1
@@ -96,7 +96,8 @@ case $mpi in
     0)
         ;;
     1)
-	CMD="OMPI_CXX=$CXX mpicxx"
+	export OMPI_CXX=$CXX
+	CMD="mpicxx"
 	;;
     *)
 	echo "mpi value must be 0 or 1"
@@ -124,5 +125,5 @@ fi
 rm -r target || true
 mkdir -p target/$(dirname $path)
 
-echo "$CXX $CXXFLAGS $path -o target/$path $LFLAGS"
-$CXX $CXXFLAGS $path -o target/$path $LFLAGS
+echo "$CMD $CXXFLAGS $path -o target/$path $LFLAGS"
+$CMD $CXXFLAGS $path -o target/$path $LFLAGS

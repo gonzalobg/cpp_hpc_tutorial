@@ -22,11 +22,23 @@
  */
 
 #include <cassert>
+#include <chrono>
 #include <iostream>
 #include <limits>
 #include <string>
 #include <vector>
-#include <chrono>
+// DONE: add C++ standard library includes as necessary
+#include <algorithm>
+#include <execution>
+#if defined(__clang__)
+// clang does not support libstdc++ ranges
+#include <range/v3/all.hpp>
+namespace views = ranges::views;
+#elif __cplusplus >= 202002L
+#include <ranges>
+namespace views = std::views;
+namespace ranges = std::ranges;
+#endif
 
 // Initialize vectors
 void initialize(std::vector<double> &x, std::vector<double> &y);
@@ -73,9 +85,10 @@ int main(int argc, char *argv[]) {
   auto seconds = std::chrono::duration<double>(clk_t::now() - start).count(); // Duration in [s]
   // Amount of bytes transferred from/to chip.
   // x is read, y is read and written:
-  auto gigabytes = 3. * (double)x.size() * (double)sizeof(double) * (double)nit * 1.e-9; // GB
-  std::cerr << "Bandwidth [GB/s]: " << (gigabytes/seconds) << std::endl;
-  
+  auto gigabytes =
+      static_cast<double>((x.size() + 2 * y.size()) * sizeof(double) * nit) / 1.e9; // GB
+  std::cerr << "Bandwidth [GB/s]: " << (gigabytes / seconds) << std::endl;
+
   return 0;
 }
 
@@ -91,15 +104,52 @@ bool check(double a, std::vector<double> const &y) {
 
 void initialize(std::vector<double> &x, std::vector<double> &y) {
   assert(x.size() == y.size());
-  for (std::size_t i = 0; i < x.size(); ++i) {
-    x[i] = (double)i;
-    y[i] = 2.;
-  }
+  // DONE: Implement using the C++ parallel Standard Template Library algorithms
+
+#if __cplusplus >= 202002L
+  // In C++20 or newer we can just use ranges:
+  auto ints = views::iota(0, (int)x.size());
+  // Note: there is no <ranges> version of the parallel algorithms in standard C++ yet
+  // so we need to use the iterator-based versions. Notice that ranges provide iterators:
+  std::transform(std::execution::par_unseq, ints.begin(), ints.end(), x.begin(),
+                 [](auto v) { return (double)v; });
+  std::fill(std::execution::par_unseq, y.begin(), y.end(), 2.0);
+#else
+  // In C++17 we can either use range-v3, or compute indices from the pointers:
+  std::transform(std::execution::par_unseq, x.begin(), x.end(), x.begin(),
+                 [x = x.data()](double const &v) {
+                   int index = &v - x; // obtain index of element
+                   return (double)index;
+                 });
+  std::fill(std::execution::par_unseq, y.begin(), y.end(), 2.0);
+#endif
 }
 
 void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
   assert(x.size() == y.size());
-  for (std::size_t i = 0; i < y.size(); ++i) {
-    y[i] += a * x[i];
-  }
+  // DONE: Implement using the C++ parallel Standard Template Library algorithms yet
+#if __cplusplus >= 202002L
+  // In C++20 or newer we can just use ranges:
+
+  auto ints = views::iota(0, (int)x.size());
+  // note: when using parallel algorithms, prefer to capture by value to improve the performance
+  // of offloading these to devices
+  std::for_each(std::execution::par_unseq, ints.begin(), ints.end(),
+                [=, y = y.data(), x = x.data()](auto i) { y[i] += a * x[i]; });
+#else
+#if defined(USE_TRANSFORM2)
+  // In C++17, we can either use the two range form of transform
+  std::transform(std::execution::par_unseq, x.begin(), x.end(), y.begin(), y.begin(),
+                 [a](double x, double y) { return a * x + y; });
+#else
+  // or use range-v3, or compute indices from the pointers:
+  // note: when using parallel algorithms, prefer to capture by value to improve the performance
+  // of offloading these to devices
+  std::transform(std::execution::par_unseq, x.begin(), x.end(), y.begin(),
+                 [&, a, y = y.data(), x = x.data()](double const &v) {
+                   int index = &v - x;
+                   return a * x[index] + y[index];
+                 });
+#endif // TRANSFORM2
+#endif
 }
