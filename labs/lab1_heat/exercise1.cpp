@@ -29,12 +29,27 @@
 #include <execution>
 #include <fstream>
 #include <iostream>
+#include <mpi.h>
+#include <numeric> // for std::transform_reduce
+#include <utility> // for std::pair
 #include <vector>
+// TODO: add includes for threads, barriers, and atomics
 
-// TODO: will need some new includes here
-// For views::cartesian_product we need to use range-v3 until C++23
+#if defined(__NVCOMPILER)
+#include <thrust/iterator/counting_iterator.h>
+#elif defined(__clang__) || __cplusplus < 202002L
+// clang does not support libstdc++ ranges
 #include <range/v3/all.hpp>
 namespace views = ranges::views;
+
+// clang does not support libstdc++ ranges
+#include <range/v3/all.hpp>
+namespace views = ranges::views;
+#elif __cplusplus >= 202002L
+#include <ranges>
+namespace views = std::views;
+namespace ranges = std::ranges;
+#endif
 
 // Problem parameters
 struct parameters {
@@ -57,11 +72,11 @@ struct parameters {
     dt = dx * dx / (5. * alpha());
   }
 
-  long nit() { return ni; }
-  long nout() { return 1000; }
-  long nx_global() { return nx * nranks; }
-  long ny_global() { return ny; }
-  double gamma() { return alpha() * dt / (dx * dx); }
+  long nit() const { return ni; }
+  long nout() const { return 1000; }
+  long nx_global() const { return nx * nranks; }
+  long ny_global() const { return ny; }
+  double gamma() const { return alpha() * dt / (dx * dx); }
 };
 
 // Index into the memory using row-major order:
@@ -102,9 +117,62 @@ struct grid {
 };
 
 double stencil(double *u_new, double *u_old, grid g, parameters p) {
-  double energy = 0.;
-  // TODO: implement using parallel algorithms with views::cartesian_product
-  return energy;
+  // Map the 2D strided iteration space (x0, xN) * (y0, yN) to 1D
+  long dx = g.x_end - g.x_start;
+  long dy = g.y_end - g.y_start;
+  long n = dx * dy; // #of elements
+#if defined(__NVCOMPILER)
+  // With NVHPC we can use Thrust's counting iterator
+  auto b = thrust::counting_iterator<long>(0);
+  auto e = thrust::counting_iterator<long>(n);
+#else
+  auto ints = views::iota((long)0, n);
+  auto b = ints.begin();
+  auto e = ints.end();
+#endif
+
+  // Recover the 2D strided iteration space from the 1D iteration space
+  auto split = [x_start = g.x_start, y_start = g.y_start, dy](long i) -> std::pair<long, long> {
+    return {i / dy + x_start, i % dy + y_start};
+  };
+
+  return std::transform_reduce(std::execution::par, b, e, 0.,
+                               // Binary reduction
+                               std::plus<>{},
+                               // Unary Transform
+                               [=, u_old = u_old, u_new = u_new](long i) {
+                                 auto [x, y] = split(i);
+                                 return stencil(u_new, u_old, x, y, p);
+                               });
+}
+
+double internal(double *u_new, double *u_old, parameters p) {
+  grid g{.x_start = 2, .x_end = p.nx, .y_start = 1, .y_end = p.ny - 1};
+  return stencil(u_new, u_old, g, p);
+}
+
+double prev_boundary(double *u_new, double *u_old, parameters p) {
+  // Send window cells, receive halo cells
+  if (p.rank > 0) {
+    // Send bottom boundary to bottom rank
+    MPI_Send(u_old + p.ny, p.ny, MPI_DOUBLE, p.rank - 1, 0, MPI_COMM_WORLD);
+    // Receive top boundary from bottom rank
+    MPI_Recv(u_old + 0, p.ny, MPI_DOUBLE, p.rank - 1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+  }
+  grid g{.x_start = p.nx, .x_end = p.nx + 1, .y_start = 1, .y_end = p.ny - 1};
+  return stencil(u_new, u_old, g, p);
+}
+
+double next_boundary(double *u_new, double *u_old, parameters p) {
+  if (p.rank < p.nranks - 1) {
+    // Receive bottom boundary from top rank
+    MPI_Recv(u_old + (p.nx + 1) * p.ny, p.ny, MPI_DOUBLE, p.rank + 1, 0, MPI_COMM_WORLD,
+             MPI_STATUS_IGNORE);
+    // Send top boundary to top rank, and
+    MPI_Send(u_old + p.nx * p.ny, p.ny, MPI_DOUBLE, p.rank + 1, 1, MPI_COMM_WORLD);
+  }
+  grid g{.x_start = 1, .x_end = 2, .y_start = 1, .y_end = p.ny - 1};
+  return stencil(u_new, u_old, g, p);
 }
 
 void initialize(double *u_new, double *u_old, long n) {
@@ -116,8 +184,18 @@ int main(int argc, char *argv[]) {
   // Parse CLI parameters
   parameters p(argc, argv);
 
+  // Initialize MPI with multi-threading support
+  int mt;
+  MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &mt);
+  if (mt != MPI_THREAD_MULTIPLE) {
+    std::cerr << "MPI cannot be called from multiple host threads" << std::endl;
+    std::terminate();
+  }
+  MPI_Comm_size(MPI_COMM_WORLD, &p.nranks);
+  MPI_Comm_rank(MPI_COMM_WORLD, &p.rank);
+
   // Allocate memory
-  long n = p.nx * p.ny;
+  long n = (p.nx + 2) * p.ny; // Needs to allocate 2 halo layers
   auto u_new = std::vector<double>(n);
   auto u_old = std::vector<double>(n);
 
@@ -128,14 +206,30 @@ int main(int argc, char *argv[]) {
   using clk_t = std::chrono::steady_clock;
   auto start = clk_t::now();
 
-  for (long it = 0; it < p.nit(); ++it) {
-    grid g{.x_start = 1, .x_end = p.nx - 1, .y_start = 1, .y_end = p.ny - 1};
-    double energy = stencil(u_new.data(), u_old.data(), g, p);
-    if (it % p.nout() == 0) {
-      std::cerr << "E(t=" << it * p.dt << ") = " << energy << std::endl;
-    }
-    std::swap(u_new, u_old);
-  }
+  // TODO: use an atomic variable for the energy
+  double energy = 0.;
+
+  // TODO: use a barrier for synchronization
+  // ...bar = ...
+
+  // TODO: use threads for the different computations
+  auto thread_prev = 0 /* std::thread([p, TODO: complete capture]() {
+      for (long it = 0; it < p.nit(); ++it) {
+          // TODO: perform the prev exchange and computation
+          // TODO: update the atomic energy
+          // TODO: synchronize with the barrier
+      }
+  })*/;
+
+  auto thread_next = 0 /* TODO: similar for prev */;
+
+  auto thread_internal = 0 /*
+    TODO: same as for next and prev
+    TODO: need to perform the reduction in one of the threads (for example this one)
+    TODO: need to reset the atomic in one of the threads (for example this one)
+  */;
+
+  // TODO: join all threads
 
   auto time = std::chrono::duration<double>(clk_t::now() - start).count();
   auto grid_size = static_cast<double>(p.nx * p.ny * sizeof(double) * 2) / 1e9; // GB
@@ -146,15 +240,25 @@ int main(int argc, char *argv[]) {
   }
 
   // Write output to file
-  std::ios_base::sync_with_stdio(false);
-  auto f = std::fstream("output", std::ios::out | std::ios::binary | std::ios::trunc);
-  f.write((char *)&p.nx, sizeof(long));
-  f.write((char *)&p.ny, sizeof(long));
-  double end_time = p.nit() * p.dt;
-  f.write((char *)&end_time, sizeof(double));
-  f.write((char *)u_new.data(), sizeof(double) * p.nx * p.ny);
-  f.flush();
-  f.close();
+  MPI_File f;
+  MPI_File_open(MPI_COMM_WORLD, "output", MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &f);
+  auto header_bytes = 2 * sizeof(long) + sizeof(double);
+  auto values_per_rank = p.nx * p.ny;
+  auto values_bytes_per_rank = values_per_rank * sizeof(double);
+  MPI_File_set_size(f, header_bytes + values_bytes_per_rank * p.nranks);
+  MPI_Request req[3] = {MPI_REQUEST_NULL, MPI_REQUEST_NULL, MPI_REQUEST_NULL};
+  if (p.rank == 0) {
+    long total[2] = {p.nx * p.nranks, p.ny};
+    double time = p.nit() * p.dt;
+    MPI_File_iwrite_at(f, 0, total, 2, MPI_UINT64_T, &req[1]);
+    MPI_File_iwrite_at(f, 2 * sizeof(long), &time, 1, MPI_DOUBLE, &req[2]);
+  }
+  auto values_offset = header_bytes + p.rank * values_bytes_per_rank;
+  MPI_File_iwrite_at(f, values_offset, u_new.data() + p.ny, values_per_rank, MPI_DOUBLE, &req[0]);
+  MPI_Waitall(p.rank == 0 ? 3 : 1, req, MPI_STATUSES_IGNORE);
+  MPI_File_close(&f);
+
+  MPI_Finalize();
 
   return 0;
 }

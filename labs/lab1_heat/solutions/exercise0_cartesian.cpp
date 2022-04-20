@@ -29,8 +29,11 @@
 #include <iostream>
 #include <mpi.h>
 #include <vector>
-// TODO: added parallel algorithm includes
-
+// DONE: added parallel algorithm and ranges includes
+#include <algorithm>
+#include <execution>
+#include <numeric> // for std::transform_reduce
+#include <utility> // for std::pair
 #if defined(__NVCOMPILER)
 #include <thrust/iterator/counting_iterator.h>
 #elif defined(__clang__) || __cplusplus < 202002L
@@ -113,8 +116,30 @@ struct grid {
 };
 
 double stencil(double *u_new, double *u_old, grid g, parameters p) {
-  // TODO
-  return 0.;
+  // DONE: implement using parallel algorithms with views::cartesian
+#if defined(__NVCOMPILER)
+#pragma error "cartesian_view not supported by nvc++ yet"
+#endif
+  auto xs = views::iota(g.x_start, g.x_end);
+  auto ys = views::iota(g.y_start, g.y_end);
+
+  auto range = views::cartesian_product(std::move(xs), std::move(ys));
+  // We need to use std::execution::par for now:
+  return std::transform_reduce(std::execution::par, range.begin(), range.end(), 0.,
+                               // Binary reduction
+                               std::plus<>{},
+                               // Unary Transform
+                               [=, u_old = u_old, u_new = u_new](auto ids) {
+                                 auto [x, y] = ids;
+                                 return stencil(u_new, u_old, x, y, p);
+                               });
+}
+
+// Initial condition
+void initialize(double *u_new, double *u_old, long n) {
+  // DONE: initialization using parallel algorithms
+  std::fill_n(std::execution::par_unseq, u_new, n, 0.);
+  std::fill_n(std::execution::par_unseq, u_new, n, 0.);
 }
 
 double internal(double *u_new, double *u_old, parameters p) {
@@ -144,10 +169,6 @@ double next_boundary(double *u_new, double *u_old, parameters p) {
   }
   grid g{.x_start = 1, .x_end = 2, .y_start = 1, .y_end = p.ny - 1};
   return stencil(u_new, u_old, g, p);
-}
-
-void initialize(double *u_new, double *u_old, long n) {
-  // TODO: implement initialization using parallel algorithms
 }
 
 int main(int argc, char *argv[]) {

@@ -27,6 +27,7 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
+#include <mpi.h>
 #include <vector>
 // DONE: added parallel algorithm and ranges includes
 #include <algorithm>
@@ -36,6 +37,10 @@
 #if defined(__NVCOMPILER)
 #include <thrust/iterator/counting_iterator.h>
 #elif defined(__clang__) || __cplusplus < 202002L
+// clang does not support libstdc++ ranges
+#include <range/v3/all.hpp>
+namespace views = ranges::views;
+
 // clang does not support libstdc++ ranges
 #include <range/v3/all.hpp>
 namespace views = ranges::views;
@@ -111,6 +116,7 @@ struct grid {
 };
 
 double stencil(double *u_new, double *u_old, grid g, parameters p) {
+  // DONE: implement using parallel algorithms with linear indexing
   // Map the 2D strided iteration space (x0, xN) * (y0, yN) to 1D
   long dx = g.x_end - g.x_start;
   long dy = g.y_end - g.y_start;
@@ -140,18 +146,58 @@ double stencil(double *u_new, double *u_old, grid g, parameters p) {
                                });
 }
 
+// Initial condition
 void initialize(double *u_new, double *u_old, long n) {
   // DONE: initialization using parallel algorithms
   std::fill_n(std::execution::par_unseq, u_new, n, 0.);
   std::fill_n(std::execution::par_unseq, u_new, n, 0.);
 }
 
+double internal(double *u_new, double *u_old, parameters p) {
+  grid g{.x_start = 2, .x_end = p.nx, .y_start = 1, .y_end = p.ny - 1};
+  return stencil(u_new, u_old, g, p);
+}
+
+double prev_boundary(double *u_new, double *u_old, parameters p) {
+  // Send window cells, receive halo cells
+  if (p.rank > 0) {
+    // Send bottom boundary to bottom rank
+    MPI_Send(u_old + p.ny, p.ny, MPI_DOUBLE, p.rank - 1, 0, MPI_COMM_WORLD);
+    // Receive top boundary from bottom rank
+    MPI_Recv(u_old + 0, p.ny, MPI_DOUBLE, p.rank - 1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+  }
+  grid g{.x_start = p.nx, .x_end = p.nx + 1, .y_start = 1, .y_end = p.ny - 1};
+  return stencil(u_new, u_old, g, p);
+}
+
+double next_boundary(double *u_new, double *u_old, parameters p) {
+  if (p.rank < p.nranks - 1) {
+    // Receive bottom boundary from top rank
+    MPI_Recv(u_old + (p.nx + 1) * p.ny, p.ny, MPI_DOUBLE, p.rank + 1, 0, MPI_COMM_WORLD,
+             MPI_STATUS_IGNORE);
+    // Send top boundary to top rank, and
+    MPI_Send(u_old + p.nx * p.ny, p.ny, MPI_DOUBLE, p.rank + 1, 1, MPI_COMM_WORLD);
+  }
+  grid g{.x_start = 1, .x_end = 2, .y_start = 1, .y_end = p.ny - 1};
+  return stencil(u_new, u_old, g, p);
+}
+
 int main(int argc, char *argv[]) {
   // Parse CLI parameters
   parameters p(argc, argv);
 
+  // Initialize MPI with multi-threading support
+  int mt;
+  MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &mt);
+  if (mt != MPI_THREAD_MULTIPLE) {
+    std::cerr << "MPI cannot be called from multiple host threads" << std::endl;
+    std::terminate();
+  }
+  MPI_Comm_size(MPI_COMM_WORLD, &p.nranks);
+  MPI_Comm_rank(MPI_COMM_WORLD, &p.rank);
+
   // Allocate memory
-  long n = p.nx * p.ny;
+  long n = (p.nx + 2) * p.ny; // Needs to allocate 2 halo layers
   auto u_new = std::vector<double>(n);
   auto u_old = std::vector<double>(n);
 
@@ -163,9 +209,16 @@ int main(int argc, char *argv[]) {
   auto start = clk_t::now();
 
   for (long it = 0; it < p.nit(); ++it) {
-    grid g{.x_start = 1, .x_end = p.nx - 1, .y_start = 1, .y_end = p.ny - 1};
-    double energy = stencil(u_new.data(), u_old.data(), g, p);
-    if (it % p.nout() == 0) {
+    double energy = 0.;
+    // Exchange and compute domain boundaries:
+    energy += prev_boundary(u_new.data(), u_old.data(), p);
+    energy += next_boundary(u_new.data(), u_old.data(), p);
+    energy += internal(u_new.data(), u_old.data(), p);
+
+    // Reduce the energy across all neighbors to the rank == 0, and print it if necessary:
+    MPI_Reduce(p.rank == 0 ? MPI_IN_PLACE : &energy, &energy, 1, MPI_DOUBLE, MPI_SUM, 0,
+               MPI_COMM_WORLD);
+    if (p.rank == 0 && it % p.nout() == 0) {
       std::cerr << "E(t=" << it * p.dt << ") = " << energy << std::endl;
     }
     std::swap(u_new, u_old);
@@ -180,15 +233,25 @@ int main(int argc, char *argv[]) {
   }
 
   // Write output to file
-  std::ios_base::sync_with_stdio(false);
-  auto f = std::fstream("output", std::ios::out | std::ios::binary | std::ios::trunc);
-  f.write((char *)&p.nx, sizeof(long));
-  f.write((char *)&p.ny, sizeof(long));
-  double end_time = p.nit() * p.dt;
-  f.write((char *)&end_time, sizeof(double));
-  f.write((char *)u_new.data(), sizeof(double) * p.nx * p.ny);
-  f.flush();
-  f.close();
+  MPI_File f;
+  MPI_File_open(MPI_COMM_WORLD, "output", MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &f);
+  auto header_bytes = 2 * sizeof(long) + sizeof(double);
+  auto values_per_rank = p.nx * p.ny;
+  auto values_bytes_per_rank = values_per_rank * sizeof(double);
+  MPI_File_set_size(f, header_bytes + values_bytes_per_rank * p.nranks);
+  MPI_Request req[3] = {MPI_REQUEST_NULL, MPI_REQUEST_NULL, MPI_REQUEST_NULL};
+  if (p.rank == 0) {
+    long total[2] = {p.nx * p.nranks, p.ny};
+    double time = p.nit() * p.dt;
+    MPI_File_iwrite_at(f, 0, total, 2, MPI_UINT64_T, &req[1]);
+    MPI_File_iwrite_at(f, 2 * sizeof(long), &time, 1, MPI_DOUBLE, &req[2]);
+  }
+  auto values_offset = header_bytes + p.rank * values_bytes_per_rank;
+  MPI_File_iwrite_at(f, values_offset, u_new.data() + p.ny, values_per_rank, MPI_DOUBLE, &req[0]);
+  MPI_Waitall(p.rank == 0 ? 3 : 1, req, MPI_STATUSES_IGNORE);
+  MPI_File_close(&f);
+
+  MPI_Finalize();
 
   return 0;
 }

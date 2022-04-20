@@ -34,64 +34,34 @@ echo "${compilers}" | tr ' ' '\n' | while read compiler; do
     done
 done
 
-# Lab 1: Heat equation (no MPI): compile and run full solutions
-daxpy="lab1_heat/starting_point.cpp lab1_heat/solutions/exercise0.cpp lab1_heat/solutions/exercise1.cpp"
-echo "${compilers}" | tr ' ' '\n' | while read compiler; do
-    echo "${modes}" | tr ' ' '\n' | while read mode; do
-	echo "${stds}" | tr ' ' '\n' | while read std; do
-	    echo "${daxpy}" | tr ' ' '\n' | while read file; do
-		if  [ "${compiler}" = "nvc++" ] && [ "${file}" = "lab1_heat/solutions/exercise1.cpp" ] ; then
-		    # TODO: range-v3 view::cartesian_product not supported by nvc++ yet
-		    continue
-		else
-		    ./ci/compile ${compiler} ${mode} 0 ${std} labs/${file}
-		    echo "./target/labs/${file} 2048 1024 100"
-		    ./target/labs/${file} 2048 1024 100
-		fi
-	    done
-	done
-    done
-done
 
-# Lab 1: Heat equation (no MPI): compile partial solutions
-daxpy="lab1_heat/starting_point.cpp lab1_heat/exercise0.cpp lab1_heat/exercise1.cpp"
-echo "${compilers}" | tr ' ' '\n' | while read compiler; do
-    echo "${modes}" | tr ' ' '\n' | while read mode; do
-	echo "${stds}" | tr ' ' '\n' | while read std; do
-	    echo "${daxpy}" | tr ' ' '\n' | while read file; do
-		if  [ "${compiler}" = "nvc++" ] && [ "${file}" = "lab1_heat/exercise1.cpp" ] ; then
-		    # TODO: range-v3 view::cartesian_product not supported by nvc++ yet
-		    continue
-		else
-		    ./ci/compile ${compiler} ${mode} 0 ${std} labs/${file}
-		    echo "./target/labs/${file} 2048 1024"
-		    ./target/labs/${file} 2048 1024 100
-		fi
-	    done
-	done
-    done
-done
+
 
 # Lab 1: Heat equation (MPI): compile and run full solutions
-daxpy="lab1_heat/starting_point_mpi.cpp lab1_heat/solutions/exercise2.cpp"
+files="lab1_heat/starting_point.cpp lab1_heat/solutions/exercise0.cpp lab1_heat/solutions/exercise0_cartesian.cpp lab1_heat/solutions/exercise0_nomanaged.cpp lab1_heat/solutions/exercise1.cpp"
 echo "${compilers}" | tr ' ' '\n' | while read compiler; do
     echo "${modes}" | tr ' ' '\n' | while read mode; do
 	echo "${stds}" | tr ' ' '\n' | while read std; do
-	    echo "${daxpy}" | tr ' ' '\n' | while read file; do
-		./ci/compile ${compiler} ${mode} 1 ${std} labs/${file}
-		echo "./target/labs/${file} 2048 1024 100"
-		OMPI_MCA_coll_hcoll_enable=0 mpirun --oversubscribe --allow-run-as-root -np 2 ./target/labs/${file} 2048 1024 100
+	    echo "${files}" | tr ' ' '\n' | while read file; do
+		if [ "${file}" = "lab1_heat/solutions/exercise1.cpp" ] && [ "${std}" = "17" ]; then
+		    # Solution requires barrier from C++20
+		    continue
+		else
+		    ./ci/compile ${compiler} ${mode} 1 ${std} labs/${file}
+		    echo "./target/labs/${file} 2048 1024 100"
+		    OMPI_MCA_coll_hcoll_enable=0 mpirun --oversubscribe --allow-run-as-root -np 2 ./target/labs/${file} 2048 1024 100
+		fi
 	    done
 	done
     done
 done
 
 # Lab 1: Heat equation (MPI): compile partial solutions
-daxpy="lab1_heat/starting_point_mpi.cpp lab1_heat/solutions/exercise2.cpp"
+files="lab1_heat/solutions/exercise0.cpp"
 echo "${compilers}" | tr ' ' '\n' | while read compiler; do
     echo "${modes}" | tr ' ' '\n' | while read mode; do
 	echo "${stds}" | tr ' ' '\n' | while read std; do
-	    echo "${daxpy}" | tr ' ' '\n' | while read file; do
+	    echo "${files}" | tr ' ' '\n' | while read file; do
 		./ci/compile ${compiler} ${mode} 1 ${std} labs/${file}
 	    done
 	done
@@ -102,7 +72,7 @@ done
 
 
 # Lab 2: Tree
-tree="lab2_tree/starting_point.cpp lab2_tree/solutions/exercise0.cpp lab2_tree/solutions/exercise0_gpu.cpp"
+files="lab2_tree/starting_point.cpp lab2_tree/solutions/exercise0.cpp lab2_tree/solutions/exercise0_gpu.cpp"
 if [ ! -d lab2_dataset ]; then
     mkdir -p lab2_dataset
     (
@@ -112,7 +82,7 @@ if [ ! -d lab2_dataset ]; then
 fi
 echo "${compilers}" | tr ' ' '\n' | while read compiler; do
     echo "${modes}" | tr ' ' '\n' | while read mode; do
-	echo "${tree}" | tr ' ' '\n' | while read file; do
+	echo "${files}" | tr ' ' '\n' | while read file; do
 	    if [ "${mode}" = "release" ] || [ "${mode}" = "debug" ] && [ "${compiler}" = "nvc++" ] && [ "${file}" = "lab2_tree/solutions/exercise0.cpp" ] ; then
 		continue
 	    elif [ "${mode}" = "debug" ] && [ "${compiler}" = "nvc++" ] ; then

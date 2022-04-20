@@ -23,20 +23,20 @@
 
 //! Solves heat equation in 2D, see the README.
 
-#include <algorithm>
 #include <cassert>
 #include <chrono>
-#include <execution>
 #include <fstream>
 #include <iostream>
 #include <mpi.h>
+#include <vector>
+// DONE: added parallel algorithm and ranges includes
+#include <algorithm>
+#include <execution>
 #include <numeric> // for std::transform_reduce
 #include <utility> // for std::pair
-#include <vector>
-// TODO: add includes for threads, barriers, and atomics
-
 #if defined(__NVCOMPILER)
 #include <thrust/iterator/counting_iterator.h>
+#include <thrust/device_vector.h>
 #elif defined(__clang__) || __cplusplus < 202002L
 // clang does not support libstdc++ ranges
 #include <range/v3/all.hpp>
@@ -72,11 +72,11 @@ struct parameters {
     dt = dx * dx / (5. * alpha());
   }
 
-  long nit() const { return ni; }
-  long nout() const { return 1000; }
-  long nx_global() const { return nx * nranks; }
-  long ny_global() const { return ny; }
-  double gamma() const { return alpha() * dt / (dx * dx); }
+  long nit() { return ni; }
+  long nout() { return 1000; }
+  long nx_global() { return nx * nranks; }
+  long ny_global() { return ny; }
+  double gamma() { return alpha() * dt / (dx * dx); }
 };
 
 // Index into the memory using row-major order:
@@ -117,10 +117,13 @@ struct grid {
 };
 
 double stencil(double *u_new, double *u_old, grid g, parameters p) {
+  // DONE: stencil using parallel algorithms and linear indexing
   // Map the 2D strided iteration space (x0, xN) * (y0, yN) to 1D
   long dx = g.x_end - g.x_start;
   long dy = g.y_end - g.y_start;
   long n = dx * dy; // #of elements
+
+  // DONE: use pinned device memory
 #if defined(__NVCOMPILER)
   // With NVHPC we can use Thrust's counting iterator
   auto b = thrust::counting_iterator<long>(0);
@@ -144,6 +147,13 @@ double stencil(double *u_new, double *u_old, grid g, parameters p) {
                                  auto [x, y] = split(i);
                                  return stencil(u_new, u_old, x, y, p);
                                });
+}
+
+// Initial condition
+void initialize(double *u_new, double *u_old, long n) {
+  // DONE: initialization using parallel algorithms
+  std::fill_n(std::execution::par_unseq, u_new, n, 0.);
+  std::fill_n(std::execution::par_unseq, u_new, n, 0.);
 }
 
 double internal(double *u_new, double *u_old, parameters p) {
@@ -175,11 +185,6 @@ double next_boundary(double *u_new, double *u_old, parameters p) {
   return stencil(u_new, u_old, g, p);
 }
 
-void initialize(double *u_new, double *u_old, long n) {
-  std::fill_n(std::execution::par_unseq, u_new, n, 0.);
-  std::fill_n(std::execution::par_unseq, u_new, n, 0.);
-}
-
 int main(int argc, char *argv[]) {
   // Parse CLI parameters
   parameters p(argc, argv);
@@ -196,40 +201,40 @@ int main(int argc, char *argv[]) {
 
   // Allocate memory
   long n = (p.nx + 2) * p.ny; // Needs to allocate 2 halo layers
-  auto u_new = std::vector<double>(n);
-  auto u_old = std::vector<double>(n);
+#if defined(_NVHPC_STDPAR_GPU)
+  auto u_new_ = thrust::device_vector<double>(n);
+  auto u_old_ = thrust::device_vector<double>(n);
+  auto u_new = u_new_.data().get();
+  auto u_old = u_old_.data().get();
+#else
+  auto u_new_ = std::vector<double>(n);
+  auto u_old_ = std::vector<double>(n);
+  auto u_new = u_new_.data();
+  auto u_old = u_old_.data();
+#endif
 
   // Initial condition
-  initialize(u_new.data(), u_old.data(), n);
+  initialize(u_new, u_old, n);
 
   // Time loop
   using clk_t = std::chrono::steady_clock;
   auto start = clk_t::now();
 
-  // TODO: use a dynamically-allocated atomic variable for the energy
-  double *energy = new double{0.};
+  for (long it = 0; it < p.nit(); ++it) {
+    double energy = 0.;
+    // Exchange and compute domain boundaries:
+    energy += prev_boundary(u_new, u_old, p);
+    energy += next_boundary(u_new, u_old, p);
+    energy += internal(u_new, u_old, p);
 
-  // TODO: use a barrier for synchronization
-  // ...bar = ...
-
-  // TODO: use threads for the different computations
-  auto thread_prev = 0 /* std::thread([p, TODO: complete capture]() {
-      for (long it = 0; it < p.nit(); ++it) {
-          // TODO: perform the prev exchange and computation
-          // TODO: update the atomic energy
-          // TODO: synchronize with the barrier
-      }
-  })*/;
-
-  auto thread_next = 0 /* TODO: similar for prev */;
-
-  auto thread_internal = 0 /*
-    TODO: same as for next and prev
-    TODO: need to perform the reduction in one of the threads (for example this one)
-    TODO: need to reset the atomic in one of the threads (for example this one)
-  */;
-
-  // TODO: join all threads
+    // Reduce the energy across all neighbors to the rank == 0, and print it if necessary:
+    MPI_Reduce(p.rank == 0 ? MPI_IN_PLACE : &energy, &energy, 1, MPI_DOUBLE, MPI_SUM, 0,
+               MPI_COMM_WORLD);
+    if (p.rank == 0 && it % p.nout() == 0) {
+      std::cerr << "E(t=" << it * p.dt << ") = " << energy << std::endl;
+    }
+    std::swap(u_new, u_old);
+  }
 
   auto time = std::chrono::duration<double>(clk_t::now() - start).count();
   auto grid_size = static_cast<double>(p.nx * p.ny * sizeof(double) * 2) / 1e9; // GB
@@ -254,7 +259,7 @@ int main(int argc, char *argv[]) {
     MPI_File_iwrite_at(f, 2 * sizeof(long), &time, 1, MPI_DOUBLE, &req[2]);
   }
   auto values_offset = header_bytes + p.rank * values_bytes_per_rank;
-  MPI_File_iwrite_at(f, values_offset, u_new.data() + p.ny, values_per_rank, MPI_DOUBLE, &req[0]);
+  MPI_File_iwrite_at(f, values_offset, u_new + p.ny, values_per_rank, MPI_DOUBLE, &req[0]);
   MPI_Waitall(p.rank == 0 ? 3 : 1, req, MPI_STATUSES_IGNORE);
   MPI_File_close(&f);
 
