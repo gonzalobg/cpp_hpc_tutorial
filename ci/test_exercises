@@ -11,7 +11,7 @@ stds="17 20"
 
 
 # Lab 0: DAXPY: compile and run full solutions
-files="lab0_daxpy/starting_point.cpp lab0_daxpy/solutions/exercise0.cpp lab0_daxpy/solutions/exercise1.cpp lab0_daxpy/solutions/exercise1_indices.cpp lab0_daxpy/solutions/exercise2.cpp"
+files="lab1_daxpy/starting_point.cpp lab1_daxpy/solutions/exercise0.cpp lab1_daxpy/solutions/exercise1.cpp lab1_daxpy/solutions/exercise1_indices.cpp lab1_daxpy/solutions/exercise2.cpp"
 echo "${compilers}" | tr ' ' '\n' | while read compiler; do
     echo "${modes}" | tr ' ' '\n' | while read mode; do
 	echo "${stds}" | tr ' ' '\n' | while read std; do
@@ -25,7 +25,7 @@ echo "${compilers}" | tr ' ' '\n' | while read compiler; do
 done
 
 # Lab 0: DAXPY: compile partial solutions
-files="lab0_daxpy/exercise0.cpp lab0_daxpy/exercise1.cpp lab0_daxpy/exercise2.cpp"
+files="lab1_daxpy/exercise0.cpp lab1_daxpy/exercise1.cpp lab1_daxpy/exercise2.cpp"
 echo "${compilers}" | tr ' ' '\n' | while read compiler; do
     echo "${modes}" | tr ' ' '\n' | while read mode; do
 	echo "${stds}" | tr ' ' '\n' | while read std; do
@@ -40,12 +40,12 @@ done
 
 
 # Lab 1: Heat equation (MPI): compile and run full solutions
-files="lab1_heat/starting_point.cpp lab1_heat/solutions/exercise0.cpp lab1_heat/solutions/exercise0_cartesian.cpp lab1_heat/solutions/exercise0_nomanaged.cpp lab1_heat/solutions/exercise1.cpp"
+files="lab2_heat/starting_point.cpp lab2_heat/solutions/exercise0.cpp lab2_heat/solutions/exercise0_cartesian.cpp lab2_heat/solutions/exercise0_nomanaged.cpp lab2_heat/solutions/exercise1.cpp"
 echo "${compilers}" | tr ' ' '\n' | while read compiler; do
     echo "${modes}" | tr ' ' '\n' | while read mode; do
 	echo "${stds}" | tr ' ' '\n' | while read std; do
 	    echo "${files}" | tr ' ' '\n' | while read file; do
-		if [ "${file}" = "lab1_heat/solutions/exercise1.cpp" ] && [ "${std}" = "17" ]; then
+		if [ "${file}" = "lab2_heat/solutions/exercise1.cpp" ] && [ "${std}" = "17" ]; then
 		    # Solution requires barrier from C++20
 		    continue
 		else
@@ -59,7 +59,7 @@ echo "${compilers}" | tr ' ' '\n' | while read compiler; do
 done
 
 # Lab 1: Heat equation (MPI): compile partial solutions
-files="lab1_heat/solutions/exercise0.cpp"
+files="lab2_heat/solutions/exercise0.cpp"
 echo "${compilers}" | tr ' ' '\n' | while read compiler; do
     echo "${modes}" | tr ' ' '\n' | while read mode; do
 	echo "${stds}" | tr ' ' '\n' | while read std; do
@@ -74,22 +74,22 @@ done
 
 
 # Lab 2: Tree
-files="lab2_tree/starting_point.cpp lab2_tree/solutions/exercise0.cpp lab2_tree/solutions/exercise0_gpu.cpp"
+files="lab3_tree/starting_point.cpp lab3_tree/solutions/exercise0.cpp lab3_tree/solutions/exercise0_gpu.cpp"
 if [ ! -d lab2_dataset ]; then
     mkdir -p lab2_dataset
     (
 	cd lab2_dataset
-	./../labs/lab2_tree/books.sh
+	./../labs/lab3_tree/books.sh
     )
 fi
 echo "${compilers}" | tr ' ' '\n' | while read compiler; do
     echo "${modes}" | tr ' ' '\n' | while read mode; do
 	echo "${files}" | tr ' ' '\n' | while read file; do
-	    if [ "${mode}" = "release" ] || [ "${mode}" = "debug" ] && [ "${compiler}" = "nvc++" ] && [ "${file}" = "lab2_tree/solutions/exercise0.cpp" ] ; then
+	    if [ "${mode}" = "release" ] || [ "${mode}" = "debug" ] && [ "${compiler}" = "nvc++" ] && [ "${file}" = "lab3_tree/solutions/exercise0.cpp" ] ; then
 		continue
 	    elif [ "${mode}" = "debug" ] && [ "${compiler}" = "nvc++" ] ; then
 		continue
-	    elif [ "${compiler}" = "nvc++" ] && [ "${file}" = "lab2_tree/solutions/exercise0_gpu.cpp" ] ; then
+	    elif [ "${compiler}" = "nvc++" ] && [ "${file}" = "lab3_tree/solutions/exercise0_gpu.cpp" ] ; then
 		./ci/compile ${compiler} ${mode} 0 17 labs/${file}
 		echo "./target/labs/${file}"
 		cp ./target/labs/${file} lab2_dataset/tree_bin
@@ -111,7 +111,7 @@ echo "${compilers}" | tr ' ' '\n' | while read compiler; do
 done
 
 # Lab 2: Tree: compile partial solution
-files="lab2_tree/exercise0.cpp"
+files="lab3_tree/exercise0.cpp"
 echo "${compilers}" | tr ' ' '\n' | while read compiler; do
     echo "${modes}" | tr ' ' '\n' | while read mode; do
 	echo "${files}" | tr ' ' '\n' | while read file; do

@@ -23,7 +23,6 @@ Stage0 += cmake(eula=True, version='3.22.2')
 # Install NSight Systems profiler
 Stage0 += nsight_systems(eula=True)
 
-# 
 Stage0 += shell(commands=[
     'set -ex',  # Exit on first error and debug output
 
@@ -57,3 +56,9 @@ Stage0 += environment(variables={
     'LIBRARY_PATH':'/usr/lib/llvm-15/lib:$LIBRARY_PATH',
 })
 Stage0 += copy(src='labs/', dest='/labs/')
+
+# Install Intel's OneAPI toolchain
+Stage0 += packages(ospackages=['linux-headers-generic', 'intel-basekit', 'intel-hpckit'],
+                   apt_keys=['https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB'],
+                   apt_repositories=['deb https://apt.repos.intel.com/oneapi all main']
+)

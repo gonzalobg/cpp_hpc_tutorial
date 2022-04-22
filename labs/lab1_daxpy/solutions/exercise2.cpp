@@ -28,16 +28,29 @@
 #include <string>
 #include <vector>
 // DONE: add C++ standard library includes as necessary
+#if defined(__INTEL_LLVM_COMPILER)
+#include <oneapi/dpl/execution>
+#include <oneapi/dpl/algorithm>
+#include <oneapi/dpl/ranges>
+#else
 #include <algorithm>
 #include <execution>
-#if defined(__clang__)
+#endif
+
+#if defined(__clang__) && !defined(__INTEL_LLVM_COMPILER)
 // clang does not support libstdc++ ranges
 #include <range/v3/all.hpp>
 namespace views = ranges::views;
-#elif __cplusplus >= 202002L
+#elif __cplusplus >= 202002L && !defined(__INTEL_LLVM_COMPILER)
 #include <ranges>
 namespace views = std::views;
 namespace ranges = std::ranges;
+#endif
+
+#if defined(__INTEL_LLVM_COMPILER)
+namespace execution = oneapi::dpl::execution;
+#else
+namespace execution = std::execution;
 #endif
 
 // Initialize vectors
@@ -111,17 +124,17 @@ void initialize(std::vector<double> &x, std::vector<double> &y) {
   auto ints = views::iota(0, (int)x.size());
   // Note: there is no <ranges> version of the parallel algorithms in standard C++ yet
   // so we need to use the iterator-based versions. Notice that ranges provide iterators:
-  std::transform(std::execution::par_unseq, ints.begin(), ints.end(), x.begin(),
+  std::transform(execution::par_unseq, ints.begin(), ints.end(), x.begin(),
                  [](auto v) { return (double)v; });
-  std::fill(std::execution::par_unseq, y.begin(), y.end(), 2.0);
+  std::fill(execution::par_unseq, y.begin(), y.end(), 2.0);
 #else
   // In C++17 we can either use range-v3, or compute indices from the pointers:
-  std::transform(std::execution::par_unseq, x.begin(), x.end(), x.begin(),
+  std::transform(execution::par_unseq, x.begin(), x.end(), x.begin(),
                  [x = x.data()](double const &v) {
                    int index = &v - x; // obtain index of element
                    return (double)index;
                  });
-  std::fill(std::execution::par_unseq, y.begin(), y.end(), 2.0);
+  std::fill(execution::par_unseq, y.begin(), y.end(), 2.0);
 #endif
 }
 
@@ -134,18 +147,18 @@ void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
   auto ints = views::iota(0, (int)x.size());
   // note: when using parallel algorithms, prefer to capture by value to improve the performance
   // of offloading these to devices
-  std::for_each(std::execution::par_unseq, ints.begin(), ints.end(),
+  std::for_each(execution::par_unseq, ints.begin(), ints.end(),
                 [=, y = y.data(), x = x.data()](auto i) { y[i] += a * x[i]; });
 #else
 #if defined(USE_TRANSFORM2)
   // In C++17, we can either use the two range form of transform
-  std::transform(std::execution::par_unseq, x.begin(), x.end(), y.begin(), y.begin(),
+  std::transform(execution::par_unseq, x.begin(), x.end(), y.begin(), y.begin(),
                  [a](double x, double y) { return a * x + y; });
 #else
   // or use range-v3, or compute indices from the pointers:
   // note: when using parallel algorithms, prefer to capture by value to improve the performance
   // of offloading these to devices
-  std::transform(std::execution::par_unseq, x.begin(), x.end(), y.begin(),
+  std::transform(execution::par_unseq, x.begin(), x.end(), y.begin(),
                  [&, a, y = y.data(), x = x.data()](double const &v) {
                    int index = &v - x;
                    return a * x[index] + y[index];
