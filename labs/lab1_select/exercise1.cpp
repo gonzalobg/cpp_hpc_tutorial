@@ -64,7 +64,6 @@ int main(int argc, char* argv[])
         std::cerr << "ERROR!" << std::endl;
         return 1;
     }
-    std::cerr << "OK!" << std::endl;
 
     std::cout << "w = ";
     std::copy(w.begin(), w.end(), std::ostream_iterator<int>(std::cout, " "));
@@ -83,35 +82,16 @@ void initialize(std::vector<int>& v)
 template<class UnaryPredicate>
 std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
 {
-    // transform_inclusive_scan first filters the data with a "transform" operation
-    // and then computes an inclusive cumulative operation (here a sum).
+    // TODO: Allow this version of the code to run in parallel, proceeding in three steps:
+    std::vector<char> v_sel(v.size());
+    // 1. Fill v_sel with 0/1 values, depending on the outcome of the unary predicatea.
+
     std::vector<size_t> index(v.size());
-    std::transform_inclusive_scan(v.begin(), v.end(), index.begin(), std::plus<size_t>{},
-                                  [pred](int x) { return pred(x) ? 1 : 0; });
+    // 2. Compute the cumulative sum of v_sel using inclusive_scan.
 
     size_t numElem = index.empty() ? 0 : index.back();
     std::vector<int> w(numElem);
-
-#if __cplusplus >= 202002L || defined(__clang__)
-    // In C++20 or newer, or with range-v3, we can use the iota view:
-    auto ints = views::iota(0, (int)v.size());
-    std::for_each(ints.begin(), ints.end(),
-                  [pred, v=v.data(), w=w.data(), index=index.data()](int i)
-        {
-            if (pred(v[i])) w[index[i] - 1] = v[i];
-        });
-#else
-    // Otherwise, we compute indices from the pointers:
-    std::for_each(v.begin(), v.end(),
-                  [pred, v=v.data(), w=w.data(), index=index.data()](int const& x)
-        {
-            if (pred(x)) {
-                size_t i = &x - v;
-                w[index[i] - 1] = x;
-            }
-        });
-#endif
+    // 3. Use for_each to copy the selected elements from v to w.
                   
     return w;
 }
-

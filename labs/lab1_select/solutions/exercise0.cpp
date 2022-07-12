@@ -42,6 +42,7 @@ void initialize(std::vector<int>& v);
 template<class UnaryPredicate>
 std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred);
 
+
 int main(int argc, char* argv[])
 {
     // Read CLI arguments, the first argument is the name of the binary:
@@ -58,11 +59,19 @@ int main(int argc, char* argv[])
 
     initialize(v);
 
-    auto w = select(v, [](int x) { return x % 3 == 0; });
+    auto predicate = [](int x) { return x % 3 == 0; };
+    auto w = select(v, predicate);
+    if (!all_of(w, predicate)) {
+        std::cerr << "ERROR!" << std::endl;
+        return 1;
+    }
+    std::cerr << "OK!" << std::endl;
 
     std::cout << "w = ";
     std::copy(w.begin(), w.end(), std::ostream_iterator<int>(std::cout, " "));
     std::cout << std::endl;
+
+    return 0;
 }
 
 void initialize(std::vector<int>& v)
@@ -72,6 +81,8 @@ void initialize(std::vector<int>& v)
     std::generate(v.begin(), v.end(), [&distribution, &engine]{ return distribution(engine); });
 }
 
+// This version of "select" can only run sequentially, because the output
+// vector w is built consecutively during the traversal of the input vector v.
 template<class UnaryPredicate>
 std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
 {
