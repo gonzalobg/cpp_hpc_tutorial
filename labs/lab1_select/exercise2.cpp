@@ -87,6 +87,7 @@ std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
     // TODO: write a parallelizable version of select, just as for exercise 1.
     // But this time, use transform_inclusive_scan to reduce the number of steps from 3 to 2.
                   
+    std::vector<int> w;
     return w;
 }
 
