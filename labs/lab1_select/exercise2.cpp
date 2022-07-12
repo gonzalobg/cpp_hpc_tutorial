@@ -83,34 +83,8 @@ void initialize(std::vector<int>& v)
 template<class UnaryPredicate>
 std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
 {
-    // transform_inclusive_scan first filters the data with a "transform" operation
-    // and then computes an inclusive cumulative operation (here a sum).
-    std::vector<size_t> index(v.size());
-    std::transform_inclusive_scan(v.begin(), v.end(), index.begin(), std::plus<size_t>{},
-                                  [pred](int x) { return pred(x) ? 1 : 0; });
-
-    size_t numElem = index.empty() ? 0 : index.back();
-    std::vector<int> w(numElem);
-
-#if __cplusplus >= 202002L || defined(__clang__)
-    // In C++20 or newer, or with range-v3, we can use the iota view:
-    auto ints = views::iota(0, (int)v.size());
-    std::for_each(ints.begin(), ints.end(),
-                  [pred, v=v.data(), w=w.data(), index=index.data()](int i)
-        {
-            if (pred(v[i])) w[index[i] - 1] = v[i];
-        });
-#else
-    // Otherwise, we compute indices from the pointers:
-    std::for_each(v.begin(), v.end(),
-                  [pred, v=v.data(), w=w.data(), index=index.data()](int const& x)
-        {
-            if (pred(x)) {
-                size_t i = &x - v;
-                w[index[i] - 1] = x;
-            }
-        });
-#endif
+    // TODO: write a parallelizable version of select, just as for exercise 1.
+    // But this time, use transform_inclusive_scan to reduce the number of steps from 3 to 2.
                   
     return w;
 }

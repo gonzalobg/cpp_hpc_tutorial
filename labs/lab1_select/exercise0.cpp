@@ -42,6 +42,7 @@ void initialize(std::vector<int>& v);
 template<class UnaryPredicate>
 std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred);
 
+
 int main(int argc, char* argv[])
 {
     // Read CLI arguments, the first argument is the name of the binary:
@@ -80,38 +81,13 @@ void initialize(std::vector<int>& v)
     std::generate(v.begin(), v.end(), [&distribution, &engine]{ return distribution(engine); });
 }
 
+// This version of "select" can only run sequentially, because the output
+// vector w is built consecutively during the traversal of the input vector v.
 template<class UnaryPredicate>
 std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
 {
-    // transform_inclusive_scan first filters the data with a "transform" operation
-    // and then computes an inclusive cumulative operation (here a sum).
-    std::vector<size_t> index(v.size());
-    std::transform_inclusive_scan(v.begin(), v.end(), index.begin(), std::plus<size_t>{},
-                                  [pred](int x) { return pred(x) ? 1 : 0; });
-
-    size_t numElem = index.empty() ? 0 : index.back();
-    std::vector<int> w(numElem);
-
-#if __cplusplus >= 202002L || defined(__clang__)
-    // In C++20 or newer, or with range-v3, we can use the iota view:
-    auto ints = views::iota(0, (int)v.size());
-    std::for_each(ints.begin(), ints.end(),
-                  [pred, v=v.data(), w=w.data(), index=index.data()](int i)
-        {
-            if (pred(v[i])) w[index[i] - 1] = v[i];
-        });
-#else
-    // Otherwise, we compute indices from the pointers:
-    std::for_each(v.begin(), v.end(),
-                  [pred, v=v.data(), w=w.data(), index=index.data()](int const& x)
-        {
-            if (pred(x)) {
-                size_t i = &x - v;
-                w[index[i] - 1] = x;
-            }
-        });
-#endif
-                  
+    // TODO Instead of the line below, create a vector w and use a "copy_if" algorithm
+    // call to copy all elements from v to w that are selected by the unary predicate.
+    auto w = v;
     return w;
 }
-

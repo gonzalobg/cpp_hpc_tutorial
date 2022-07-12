@@ -58,11 +58,18 @@ int main(int argc, char* argv[])
 
     initialize(v);
 
-    auto w = select(v, [](int x) { return x % 3 == 0; });
+    auto predicate = [](int x) { return x % 3 == 0; };
+    auto w = select(v, predicate);
+    if (!all_of(w, predicate)) {
+        std::cerr << "ERROR!" << std::endl;
+        return 1;
+    }
 
     std::cout << "w = ";
     std::copy(w.begin(), w.end(), std::ostream_iterator<int>(std::cout, " "));
     std::cout << std::endl;
+
+    return 0;
 }
 
 void initialize(std::vector<int>& v)
@@ -84,6 +91,17 @@ std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
 
     size_t numElem = index.empty() ? 0 : index.back();
     std::vector<int> w(numElem);
+
+#if __cplusplus >= 202002L || defined(__clang__)
+    // In C++20 or newer, or with range-v3, we can use the iota view:
+    auto ints = views::iota(0, (int)v.size());
+    std::for_each(ints.begin(), ints.end(),
+                  [pred, v=v.data(), w=w.data(), index=index.data()](int i)
+        {
+            if (pred(v[i])) w[index[i] - 1] = v[i];
+        });
+#else
+    // Otherwise, we compute indices from the pointers:
     std::for_each(v.begin(), v.end(),
                   [pred, v=v.data(), w=w.data(), index=index.data()](int const& x)
         {
@@ -92,6 +110,7 @@ std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
                 w[index[i] - 1] = x;
             }
         });
+#endif
                   
     return w;
 }
