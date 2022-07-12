@@ -26,6 +26,7 @@
 #include <vector>
 #include <iterator>
 #include <iostream>
+#include <random>
 #if defined(__clang__)
 // clang does not support libstdc++ ranges
 #include <range/v3/all.hpp>
@@ -60,10 +61,11 @@ int main(int argc, char* argv[])
 
     auto predicate = [](int x) { return x % 3 == 0; };
     auto w = select(v, predicate);
-    if (!all_of(w, predicate)) {
+    if (!std::all_of(w.begin(), w.end(), predicate)) {
         std::cerr << "ERROR!" << std::endl;
         return 1;
     }
+    std::cerr << "OK!" << std::endl;
 
     std::cout << "w = ";
     std::copy(w.begin(), w.end(), std::ostream_iterator<int>(std::cout, " "));
