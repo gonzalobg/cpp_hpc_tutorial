@@ -2,7 +2,7 @@ target/
 lab2_dataset/
 output*
 labs/lab1_daxpy/daxpy
-labs/lab2_heat/
+labs/lab2_heat/heat
 labs/lab2_heat/output*
-labs/lab3_tree/
+labs/lab3_tree/tree
 labs/lab3_tree/*.txt
