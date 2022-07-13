@@ -22,6 +22,7 @@
  */
 
 #include <algorithm>
+#include <execution>
 #include <numeric>
 #include <vector>
 #include <iterator>
@@ -61,7 +62,7 @@ int main(int argc, char* argv[])
 
     auto predicate = [](int x) { return x % 3 == 0; };
     auto w = select(v, predicate);
-    if (!std::all_of(w.begin(), w.end(), predicate)) {
+    if (!std::all_of(w.begin(), w.end(), predicate) || w.empty()) {
         std::cerr << "ERROR!" << std::endl;
         return 1;
     }
@@ -87,7 +88,7 @@ std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
     // transform_inclusive_scan first filters the data with a "transform" operation
     // and then computes an inclusive cumulative operation (here a sum).
     std::vector<size_t> index(v.size());
-    std::transform_inclusive_scan(v.begin(), v.end(), index.begin(), std::plus<size_t>{},
+    std::transform_inclusive_scan(std::execution::par, v.begin(), v.end(), index.begin(), std::plus<size_t>{},
                                   [pred](int x) { return pred(x) ? 1 : 0; });
 
     size_t numElem = index.empty() ? 0 : index.back();
@@ -96,14 +97,14 @@ std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
 #if __cplusplus >= 202002L || defined(__clang__)
     // In C++20 or newer, or with range-v3, we can use the iota view:
     auto ints = views::iota(0, (int)v.size());
-    std::for_each(ints.begin(), ints.end(),
+    std::for_each(std::execution::par, ints.begin(), ints.end(),
                   [pred, v=v.data(), w=w.data(), index=index.data()](int i)
         {
             if (pred(v[i])) w[index[i] - 1] = v[i];
         });
 #else
     // Otherwise, we compute indices from the pointers:
-    std::for_each(v.begin(), v.end(),
+    std::for_each(std::execution::par, v.begin(), v.end(),
                   [pred, v=v.data(), w=w.data(), index=index.data()](int const& x)
         {
             if (pred(x)) {
