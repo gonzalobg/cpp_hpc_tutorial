@@ -61,7 +61,7 @@ int main(int argc, char* argv[])
 
     auto predicate = [](int x) { return x % 3 == 0; };
     auto w = select(v, predicate);
-    if (!std::all_of(w.begin(), w.end(), predicate)) {
+    if (!std::all_of(w.begin(), w.end(), predicate) || w.empty()) {
         std::cerr << "ERROR!" << std::endl;
         return 1;
     }

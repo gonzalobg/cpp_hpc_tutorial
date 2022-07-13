@@ -62,7 +62,7 @@ int main(int argc, char* argv[])
 
     auto predicate = [](int x) { return x % 3 == 0; };
     auto w = select(v, predicate);
-    if (!std::all_of(w.begin(), w.end(), predicate)) {
+    if (!std::all_of(w.begin(), w.end(), predicate) || w.empty()) {
         std::cerr << "ERROR!" << std::endl;
         return 1;
     }
@@ -88,6 +88,7 @@ template<class UnaryPredicate>
 std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
 {
     std::vector<int> w;
+    // NOTE: trying to use back_inserter in parallel introduces a data race!
     std::copy_if(v.begin(), v.end(), std::back_inserter(w), pred);
     return w;
 }

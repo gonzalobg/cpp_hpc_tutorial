@@ -2,8 +2,8 @@
 HPCCM development container for the C++ HPC tutorial
 https://github.com/NVIDIA/hpc-container-maker/
 """
-nvhpc_ver = '22.3'
-cuda_ver = '11.6'
+nvhpc_ver = '22.5'
+cuda_ver = '11.7'
 
 #Stage0 += baseimage(image = f'nvcr.io/nvidia/nvhpc:{nvhpc_ver}-devel-cuda{cuda_ver}-ubuntu20.04')
 Stage0 += baseimage(image = f'nvcr.io/nvidia/nvhpc:{nvhpc_ver}-devel-cuda_multi-ubuntu20.04')
@@ -13,15 +13,19 @@ Stage0 += packages(ospackages=[
     'python3', 'python3-pip', 'python-is-python3', 'python3-setuptools',
     'nginx', 'zip', 'make', 'build-essential', 'curl',
     'git', 'bc', 'debianutils', 'libnuma1', 'openssh-client', 'wget', 'numactl',
+    # editors
+    'emacs', 'vim',
 ])
 
 # Install GNU and LLVM toolchains and CMake
 Stage0 += gnu(version='11', extra_repository=True)
 Stage0 += llvm(version='15', upstream=True, extra_tools=True, toolset=True)
-Stage0 += cmake(eula=True, version='3.22.2')
+Stage0 += cmake(eula=True, version='3.23.2')
 
-# Install NSight Systems profiler
-Stage0 += nsight_systems(eula=True)
+# Install NSight Systems and NSight Compute profilers
+# These are shipped with the HPC SDK containers now
+# Stage0 += nsight_systems(eula=True)
+# Stage0 += nsight_compute(eula=True)
 
 Stage0 += shell(commands=[
     'set -ex',  # Exit on first error and debug output
@@ -58,7 +62,7 @@ Stage0 += environment(variables={
 Stage0 += copy(src='labs/', dest='/labs/')
 
 # Install Intel's OneAPI toolchain
-Stage0 += packages(ospackages=['linux-headers-generic', 'intel-basekit', 'intel-hpckit'],
-                   apt_keys=['https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB'],
-                   apt_repositories=['deb https://apt.repos.intel.com/oneapi all main']
-)
+#Stage0 += packages(ospackages=['linux-headers-generic', 'intel-basekit', 'intel-hpckit'],
+#                   apt_keys=['https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB'],
+#                   apt_repositories=['deb https://apt.repos.intel.com/oneapi all main']
+#)
