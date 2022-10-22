@@ -21,28 +21,29 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <iostream>
 #include <limits>
 #include <string>
 #include <vector>
-#if defined(__clang__)
-// clang does not support libstdc++ ranges
-#include <range/v3/all.hpp>
-namespace views = ranges::views;
-#elif __cplusplus >= 202002L
-#include <ranges>
-namespace views = std::views;
-namespace ranges = std::ranges;
-#endif
+#include <algorithm>
+// TODO: add C++ standard library includes as necessary
 
-// Initialize vectors
-void initialize(std::vector<double> &x, std::vector<double> &y);
+/// Intialize vectors `x` and `y`: raw loop sequential version
+void initialize(std::vector<double> &x, std::vector<double> &y) {
+  assert(x.size() == y.size());
+  // TODO: Initialize `x` using SEQUENTIAL std::for_each_n algorithm with std::views::iota
+  // TODO: Initialize `y` using SEQUENTIAL std::fill_n algorithm
+}
 
-// DAXPY
-void daxpy(double a, std::vector<double> const &x, std::vector<double> &y);
+/// DAXPY: AX + Y: raw loop sequential version
+void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
+  assert(x.size() == y.size());
+  // DONE: Implement using SEQUENTIAL transform algorithm
+  std::transform(x.begin(), x.end(), y.begin(), y.begin(),
+                 [&](double x, double y) { return a * x + y; });
+}
 
 // Check solution
 bool check(double a, std::vector<double> const &y);
@@ -97,16 +98,4 @@ bool check(double a, std::vector<double> const &y) {
       return false;
   }
   return true;
-}
-
-void initialize(std::vector<double> &x, std::vector<double> &y) {
-  assert(x.size() == y.size());
-  // TODO: Implement using the C++ Standard Template Library range algorithms
-}
-
-void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
-  assert(x.size() == y.size());
-  // DONE: Implement using the C++ Standard Template Library algorithms
-  std::transform(x.begin(), x.end(), y.begin(), y.begin(),
-                 [&](double x, double y) { return a * x + y; });
 }

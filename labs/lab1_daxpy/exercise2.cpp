@@ -28,22 +28,26 @@
 #include <limits>
 #include <string>
 #include <vector>
-#if defined(__clang__)
-// clang does not support libstdc++ ranges
-#include <range/v3/all.hpp>
-namespace views = ranges::views;
-#elif __cplusplus >= 202002L
 #include <ranges>
-namespace views = std::views;
-namespace ranges = std::ranges;
-#endif
 // TODO: add C++ standard library includes as necessary
 
-// Initialize vectors
-void initialize(std::vector<double> &x, std::vector<double> &y);
+/// Intialize vectors `x` and `y`: parallel algorithm version
+void initialize(std::vector<double> &x, std::vector<double> &y) {
+  assert(x.size() == y.size());
+  // TODO: Parallelize initialization of `x`
+  auto ints = std::views::iota(0);
+  std::for_each_n(ints.begin(), x.size(), [&x](int i) { x[i] = (double)i; });
+  // TODO: Parallelize initialization of `y`
+  std::fill_n(y.begin(), y.size(), 2.);
+}
 
-// DAXPY
-void daxpy(double a, std::vector<double> const &x, std::vector<double> &y);
+/// DAXPY: AX + Y: sequential algorithm version
+void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
+  assert(x.size() == y.size());
+  /// TODO: Parallelize DAXPY computation
+  std::transform(x.begin(), x.end(), y.begin(), y.begin(),
+                 [&](double x, double y) { return a * x + y; });
+}
 
 // Check solution
 bool check(double a, std::vector<double> const &y);
@@ -98,16 +102,4 @@ bool check(double a, std::vector<double> const &y) {
       return false;
   }
   return true;
-}
-
-void initialize(std::vector<double> &x, std::vector<double> &y) {
-  assert(x.size() == y.size());
-  // TODO: Implement using the C++ parallel Standard Template Library algorithms
-  // ...
-}
-
-void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
-  assert(x.size() == y.size());
-  // TODO: Implement using the C++ parallel Standard Template Library algorithms
-  // ...
 }

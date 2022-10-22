@@ -8,6 +8,7 @@ PORT=8888
 
 DOCKER_CMDS="\
   --gpus=all \
+  --privileged \
   -u $(id -u):$(id -g) \
   -h $(hostname) \
   -v $(pwd):/src \

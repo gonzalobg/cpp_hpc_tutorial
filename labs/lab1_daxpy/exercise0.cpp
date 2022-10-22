@@ -29,11 +29,21 @@
 #include <vector>
 // TODO: add C++ standard library includes as necessary
 
-// Initialize vectors
-void initialize(std::vector<double> &x, std::vector<double> &y);
+/// Intialize vectors `x` and `y`: raw loop sequential version
+void initialize(std::vector<double> &x, std::vector<double> &y) {
+  assert(x.size() == y.size());
+  for (std::size_t i = 0; i < x.size(); ++i) {
+    x[i] = (double)i;
+    y[i] = 2.;
+  }
+}
 
-// DAXPY
-void daxpy(double a, std::vector<double> const &x, std::vector<double> &y);
+/// DAXPY: AX + Y: sequential algorithm version
+void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
+  assert(x.size() == y.size());
+  // TODO: Implement using SEQUENTIAL transform algorithm
+  // ...
+}
 
 // Check solution
 bool check(double a, std::vector<double> const &y);
@@ -88,18 +98,4 @@ bool check(double a, std::vector<double> const &y) {
       return false;
   }
   return true;
-}
-
-void initialize(std::vector<double> &x, std::vector<double> &y) {
-  assert(x.size() == y.size());
-  for (std::size_t i = 0; i < x.size(); ++i) {
-    x[i] = (double)i;
-    y[i] = 2.;
-  }
-}
-
-void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
-  assert(x.size() == y.size());
-  // TODO: Implement using the C++ Standard Template Library algorithms
-  // ...
 }

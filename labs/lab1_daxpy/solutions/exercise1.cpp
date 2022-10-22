@@ -27,23 +27,27 @@
 #include <limits>
 #include <string>
 #include <vector>
-// DONE: add C++ standard library includes as necessary
 #include <algorithm>
-#if defined(__clang__)
-// clang does not support libstdc++ ranges
-#include <range/v3/all.hpp>
-namespace views = ranges::views;
-#elif __cplusplus >= 202002L
+// DONE: add C++ standard library includes as necessary
 #include <ranges>
-namespace views = std::views;
-namespace ranges = std::ranges;
-#endif
 
-// Initialize vectors
-void initialize(std::vector<double> &x, std::vector<double> &y);
+/// Intialize vectors `x` and `y`: raw loop sequential version
+void initialize(std::vector<double> &x, std::vector<double> &y) {
+  assert(x.size() == y.size());
+  // DONE: Initialize `x` using SEQUENTIAL std::for_each_n algorithm with std::views::iota
+  auto ints = std::views::iota(0);
+  std::for_each_n(ints.begin(), x.size(), [&x](int i) { x[i] = (double)i; });
+  // DONE: Initialize `y` using SEQUENTIAL std::fill_n algorithm
+  std::fill_n(y.begin(), y.size(), 2.);
+}
 
-// DAXPY
-void daxpy(double a, std::vector<double> const &x, std::vector<double> &y);
+/// DAXPY: AX + Y: sequential algorithm version
+void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
+  assert(x.size() == y.size());
+  // DONE: Implement using SEQUENTIAL transform algorithm
+  std::transform(x.begin(), x.end(), y.begin(), y.begin(),
+                 [&](double x, double y) { return a * x + y; });
+}
 
 // Check solution
 bool check(double a, std::vector<double> const &y);
@@ -98,31 +102,4 @@ bool check(double a, std::vector<double> const &y) {
       return false;
   }
   return true;
-}
-
-void initialize(std::vector<double> &x, std::vector<double> &y) {
-  assert(x.size() == y.size());
-  // DONE: Implement using the C++ Standard Template Library range algorithms
-#if __cplusplus >= 202002L
-  // In C++20 or newer we can just use ranges:
-  auto ints = views::iota(0, (int)x.size());
-  // Note: there is no <ranges> version of the parallel algorithms in standard C++ yet
-  // so we need to use the iterator-based versions. Notice that ranges provide iterators:
-  std::transform(ints.begin(), ints.end(), x.begin(), [](auto v) { return (double)v; });
-  std::fill(y.begin(), y.end(), 2.0);
-#else
-  // In C++17 we can either use range-v3, or compute indices from the pointers:
-  std::transform(x.begin(), x.end(), x.begin(), [x = x.data()](double const &v) {
-    int index = &v - x; // obtain index of element
-    return (double)index;
-  });
-  std::fill(y.begin(), y.end(), 2.0);
-#endif
-}
-
-void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
-  assert(x.size() == y.size());
-  // DONE: Implement using the C++ Standard Template Library algorithms
-  std::transform(x.begin(), x.end(), y.begin(), y.begin(),
-                 [&](double x, double y) { return a * x + y; });
 }

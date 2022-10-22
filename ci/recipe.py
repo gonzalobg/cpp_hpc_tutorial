@@ -2,11 +2,13 @@
 HPCCM development container for the C++ HPC tutorial
 https://github.com/NVIDIA/hpc-container-maker/
 """
-nvhpc_ver = '22.5'
+nvhpc_ver = '22.9'
 cuda_ver = '11.7'
+gcc_ver = '12'
+llvm_ver = '16'
 
 #Stage0 += baseimage(image = f'nvcr.io/nvidia/nvhpc:{nvhpc_ver}-devel-cuda{cuda_ver}-ubuntu20.04')
-Stage0 += baseimage(image = f'nvcr.io/nvidia/nvhpc:{nvhpc_ver}-devel-cuda_multi-ubuntu20.04')
+Stage0 += baseimage(image = f'nvcr.io/nvidia/nvhpc:{nvhpc_ver}-devel-cuda_multi-ubuntu22.04')
 
 Stage0 += packages(ospackages=[
     'libtbb-dev',  # Required for GCC C++ parallel STL
@@ -18,9 +20,9 @@ Stage0 += packages(ospackages=[
 ])
 
 # Install GNU and LLVM toolchains and CMake
-Stage0 += gnu(version='11', extra_repository=True)
-Stage0 += llvm(version='15', upstream=True, extra_tools=True, toolset=True)
-Stage0 += cmake(eula=True, version='3.23.2')
+Stage0 += gnu(version=gcc_ver, extra_repository=True)
+Stage0 += llvm(version=llvm_ver, upstream=True, extra_tools=True, toolset=True)
+Stage0 += cmake(eula=True, version='3.24.2')
 
 # Install NSight Systems and NSight Compute profilers
 # These are shipped with the HPC SDK containers now
@@ -53,11 +55,12 @@ Stage0 += shell(commands=[
 
 # libc++abi : make sure clang with -stdlib=libc++ can find it
 Stage0 += shell(commands=[
-    'ln -sf /usr/lib/llvm-15/lib/libc++abi.so.1 /usr/lib/llvm-15/lib/libc++abi.so',
+    f'ln -sf /usr/lib/llvm-{llvm_ver}/lib/libc++abi.so.1 /usr/lib/llvm-{llvm_ver}/lib/libc++abi.so',
 ])
 Stage0 += environment(variables={
-    'LD_LIBRARY_PATH':'/usr/lib/llvm-15/lib:$LD_LIBRARY_PATH',
-    'LIBRARY_PATH':'/usr/lib/llvm-15/lib:$LIBRARY_PATH',
+    'LD_LIBRARY_PATH': f'/usr/lib/llvm-{llvm_ver}/lib:$LD_LIBRARY_PATH',
+    'LIBRARY_PATH':    f'/usr/lib/llvm-{llvm_ver}/lib:$LIBRARY_PATH',
+    'OMPI_MCA_coll_hcoll_enable':'0',
 })
 Stage0 += copy(src='labs/', dest='/labs/')
 
