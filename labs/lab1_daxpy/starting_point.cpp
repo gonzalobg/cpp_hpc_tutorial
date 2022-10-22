@@ -28,13 +28,24 @@
 #include <string>
 #include <vector>
 
-// Initialize vectors
-void initialize(std::vector<double> &x, std::vector<double> &y);
+/// Intialize vectors `x` and `y`: raw loop sequential version
+void initialize(std::vector<double> &x, std::vector<double> &y) {
+  assert(x.size() == y.size());
+  for (std::size_t i = 0; i < x.size(); ++i) {
+    x[i] = (double)i;
+    y[i] = 2.;
+  }
+}
 
-// DAXPY
-void daxpy(double a, std::vector<double> const &x, std::vector<double> &y);
+/// DAXPY: AX + Y: raw loop sequential version
+void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
+  assert(x.size() == y.size());
+  for (std::size_t i = 0; i < y.size(); ++i) {
+    y[i] += a * x[i];
+  }
+}
 
-// Check solution
+/// Check solution
 bool check(double a, std::vector<double> const &y);
 
 int main(int argc, char *argv[]) {
@@ -47,7 +58,7 @@ int main(int argc, char *argv[]) {
   // Read length of vector elements
   long long n = std::stoll(argv[1]);
 
-  // Allocate the vector
+  // Allocate the vector and initialize to 0.
   std::vector<double> x(n, 0.), y(n, 0.);
   double a = 2.0;
 
@@ -87,19 +98,4 @@ bool check(double a, std::vector<double> const &y) {
       return false;
   }
   return true;
-}
-
-void initialize(std::vector<double> &x, std::vector<double> &y) {
-  assert(x.size() == y.size());
-  for (std::size_t i = 0; i < x.size(); ++i) {
-    x[i] = (double)i;
-    y[i] = 2.;
-  }
-}
-
-void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
-  assert(x.size() == y.size());
-  for (std::size_t i = 0; i < y.size(); ++i) {
-    y[i] += a * x[i];
-  }
 }

@@ -27,37 +27,28 @@
 #include <limits>
 #include <string>
 #include <vector>
-// DONE: add C++ standard library includes as necessary
-#if defined(__INTEL_LLVM_COMPILER)
-#include <oneapi/dpl/execution>
-#include <oneapi/dpl/algorithm>
-#include <oneapi/dpl/ranges>
-#else
 #include <algorithm>
-#include <execution>
-#endif
-
-#if defined(__clang__) && !defined(__INTEL_LLVM_COMPILER)
-// clang does not support libstdc++ ranges
-#include <range/v3/all.hpp>
-namespace views = ranges::views;
-#elif __cplusplus >= 202002L && !defined(__INTEL_LLVM_COMPILER)
 #include <ranges>
-namespace views = std::views;
-namespace ranges = std::ranges;
-#endif
+// DONE: add C++ standard library includes as necessary
+#include <execution>
 
-#if defined(__INTEL_LLVM_COMPILER)
-namespace execution = oneapi::dpl::execution;
-#else
-namespace execution = std::execution;
-#endif
+/// Intialize vectors `x` and `y`: raw loop sequential version
+void initialize(std::vector<double> &x, std::vector<double> &y) {
+  assert(x.size() == y.size());
+  // DONE: Parallelize initialization of `x`. Notice that `x.data()` is captured by value.
+  auto ints = std::views::iota(0);
+  std::for_each_n(std::execution::par_unseq, ints.begin(), x.size(), [x = x.data()](int i) { x[i] = (double)i; });
+  // DONE: Parallelize initialization of `y`
+  std::fill_n(std::execution::par_unseq, y.begin(), y.size(), 2.);
+}
 
-// Initialize vectors
-void initialize(std::vector<double> &x, std::vector<double> &y);
-
-// DAXPY
-void daxpy(double a, std::vector<double> const &x, std::vector<double> &y);
+/// DAXPY: AX + Y: sequential algorithm version
+void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
+  assert(x.size() == y.size());
+  /// DONE: Parallelize DAXPY computation. Notice that `a` is captured by value.
+  std::transform(std::execution::par_unseq, x.begin(), x.end(), y.begin(), y.begin(),
+                 [a](double x, double y) { return a * x + y; });
+}
 
 // Check solution
 bool check(double a, std::vector<double> const &y);
@@ -113,56 +104,4 @@ bool check(double a, std::vector<double> const &y) {
       return false;
   }
   return true;
-}
-
-void initialize(std::vector<double> &x, std::vector<double> &y) {
-  assert(x.size() == y.size());
-  // DONE: Implement using the C++ parallel Standard Template Library algorithms
-
-#if __cplusplus >= 202002L
-  // In C++20 or newer we can just use ranges:
-  auto ints = views::iota(0, (int)x.size());
-  // Note: there is no <ranges> version of the parallel algorithms in standard C++ yet
-  // so we need to use the iterator-based versions. Notice that ranges provide iterators:
-  std::transform(execution::par_unseq, ints.begin(), ints.end(), x.begin(),
-                 [](auto v) { return (double)v; });
-  std::fill(execution::par_unseq, y.begin(), y.end(), 2.0);
-#else
-  // In C++17 we can either use range-v3, or compute indices from the pointers:
-  std::transform(execution::par_unseq, x.begin(), x.end(), x.begin(),
-                 [x = x.data()](double const &v) {
-                   int index = &v - x; // obtain index of element
-                   return (double)index;
-                 });
-  std::fill(execution::par_unseq, y.begin(), y.end(), 2.0);
-#endif
-}
-
-void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
-  assert(x.size() == y.size());
-  // DONE: Implement using the C++ parallel Standard Template Library algorithms yet
-#if __cplusplus >= 202002L
-  // In C++20 or newer we can just use ranges:
-
-  auto ints = views::iota(0, (int)x.size());
-  // note: when using parallel algorithms, prefer to capture by value to improve the performance
-  // of offloading these to devices
-  std::for_each(execution::par_unseq, ints.begin(), ints.end(),
-                [=, y = y.data(), x = x.data()](auto i) { y[i] += a * x[i]; });
-#else
-#if defined(USE_TRANSFORM2)
-  // In C++17, we can either use the two range form of transform
-  std::transform(execution::par_unseq, x.begin(), x.end(), y.begin(), y.begin(),
-                 [a](double x, double y) { return a * x + y; });
-#else
-  // or use range-v3, or compute indices from the pointers:
-  // note: when using parallel algorithms, prefer to capture by value to improve the performance
-  // of offloading these to devices
-  std::transform(execution::par_unseq, x.begin(), x.end(), y.begin(),
-                 [&, a, y = y.data(), x = x.data()](double const &v) {
-                   int index = &v - x;
-                   return a * x[index] + y[index];
-                 });
-#endif // TRANSFORM2
-#endif
 }
