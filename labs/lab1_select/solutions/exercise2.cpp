@@ -22,27 +22,42 @@
  */
 
 #include <algorithm>
-#include <execution>
+#include <chrono>
 #include <numeric>
 #include <vector>
 #include <iterator>
 #include <iostream>
 #include <random>
-#if defined(__clang__)
-// clang does not support libstdc++ ranges
-#include <range/v3/all.hpp>
-namespace views = ranges::views;
-#elif __cplusplus >= 202002L
 #include <ranges>
-namespace views = std::views;
-#endif
+#include <execution>
+
+// Select elements and copy them to a new vector
+template<class UnaryPredicate>
+void select(const std::vector<int>& v, UnaryPredicate pred, 
+            std::vector<size_t>& index, std::vector<int>& w)
+{
+    // transform_inclusive_scan first filters the data with a "transform" operation
+    // and then computes an inclusive cumulative operation (here a sum).
+    index.resize(v.size());
+    std::transform_inclusive_scan(std::execution::par, v.begin(), v.end(), index.begin(), std::plus<size_t>{},
+                                  [pred](int x) { return pred(x) ? 1 : 0; });
+
+    size_t numElem = index.empty() ? 0 : index.back();
+    w.resize(numElem);
+
+    auto ints = std::views::iota(0, (int)v.size());
+    std::for_each(std::execution::par, ints.begin(), ints.end(),
+        [pred, v=v.data(), w=w.data(), index=index.data()](int i) {
+            if (pred(v[i])) w[index[i] - 1] = v[i];
+    });
+}
 
 // Initialize vector
 void initialize(std::vector<int>& v);
 
-// Select elements and copy them to a new vector
-template<class UnaryPredicate>
-std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred);
+// Benchmarks the implementation
+template <typename Predicate>
+void bench(std::vector<int>& v, Predicate&& predicate, std::vector<size_t>& index, std::vector<int>& w);
 
 int main(int argc, char* argv[])
 {
@@ -61,16 +76,22 @@ int main(int argc, char* argv[])
     initialize(v);
 
     auto predicate = [](int x) { return x % 3 == 0; };
-    auto w = select(v, predicate);
+    std::vector<size_t> index;
+    std::vector<int> w;                       
+    select(v, predicate, index, w);
     if (!std::all_of(w.begin(), w.end(), predicate) || w.empty()) {
         std::cerr << "ERROR!" << std::endl;
         return 1;
     }
     std::cerr << "OK!" << std::endl;
 
-    std::cout << "w = ";
-    std::copy(w.begin(), w.end(), std::ostream_iterator<int>(std::cout, " "));
-    std::cout << std::endl;
+    if (n < 40) {
+        std::cout << "w = ";
+        std::copy(w.begin(), w.end(), std::ostream_iterator<int>(std::cout, " "));
+        std::cout << std::endl;
+    }
+    
+    bench(v, predicate, index, w);
 
     return 0;
 }
@@ -82,38 +103,19 @@ void initialize(std::vector<int>& v)
     std::generate(v.begin(), v.end(), [&distribution, &engine]{ return distribution(engine); });
 }
 
-template<class UnaryPredicate>
-std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
-{
-    // transform_inclusive_scan first filters the data with a "transform" operation
-    // and then computes an inclusive cumulative operation (here a sum).
-    std::vector<size_t> index(v.size());
-    std::transform_inclusive_scan(std::execution::par, v.begin(), v.end(), index.begin(), std::plus<size_t>{},
-                                  [pred](int x) { return pred(x) ? 1 : 0; });
-
-    size_t numElem = index.empty() ? 0 : index.back();
-    std::vector<int> w(numElem);
-
-#if __cplusplus >= 202002L || defined(__clang__)
-    // In C++20 or newer, or with range-v3, we can use the iota view:
-    auto ints = views::iota(0, (int)v.size());
-    std::for_each(std::execution::par, ints.begin(), ints.end(),
-                  [pred, v=v.data(), w=w.data(), index=index.data()](int i)
-        {
-            if (pred(v[i])) w[index[i] - 1] = v[i];
-        });
-#else
-    // Otherwise, we compute indices from the pointers:
-    std::for_each(std::execution::par, v.begin(), v.end(),
-                  [pred, v=v.data(), w=w.data(), index=index.data()](int const& x)
-        {
-            if (pred(x)) {
-                size_t i = &x - v;
-                w[index[i] - 1] = x;
-            }
-        });
-#endif
-                  
-    return w;
+template <typename Predicate>
+void bench(std::vector<int>& v, Predicate&& predicate, std::vector<size_t>& index, std::vector<int>& w) {
+  // Measure bandwidth in [GB/s]
+  using clk_t = std::chrono::steady_clock;
+  select(v, predicate, index, w);
+  auto start = clk_t::now();
+  int nit = 100;
+  for (int it = 0; it < nit; ++it) {
+    select(v, predicate, index, w);
+  }
+  auto seconds = std::chrono::duration<double>(clk_t::now() - start).count(); // Duration in [s]
+  // Amount of bytes transferred from/to chip.
+  // v is read (int), written to index (size_t), then v and index are read (int, size_t), and written to w (int):
+  auto gigabytes = (3. * sizeof(int) + 2. * sizeof(size_t)) * (double)v.size() * (double)nit * 1.e-9; // GB
+  std::cerr << "Bandwidth [GB/s]: " << (gigabytes / seconds) << std::endl;
 }
-

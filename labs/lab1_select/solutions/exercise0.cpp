@@ -27,22 +27,23 @@
 #include <iterator>
 #include <iostream>
 #include <random>
-#if defined(__clang__)
-// clang does not support libstdc++ ranges
-#include <range/v3/all.hpp>
-namespace views = ranges::views;
-#elif __cplusplus >= 202002L
 #include <ranges>
-namespace views = std::views;
-#endif
+
+// Select elements and copy them to a new vector.
+//
+// This version of "select" can only run sequentially, because the output
+// vector w is built consecutively during the traversal of the input vector v.
+template<class UnaryPredicate>
+std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
+{
+    std::vector<int> w;
+    // NOTE: trying to use back_inserter in parallel introduces a data race!
+    std::copy_if(v.begin(), v.end(), std::back_inserter(w), pred);
+    return w;
+}
 
 // Initialize vector
 void initialize(std::vector<int>& v);
-
-// Select elements and copy them to a new vector
-template<class UnaryPredicate>
-std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred);
-
 
 int main(int argc, char* argv[])
 {
@@ -80,15 +81,4 @@ void initialize(std::vector<int>& v)
     auto distribution = std::uniform_int_distribution<int> {0, 100};
     auto engine = std::mt19937 {1};
     std::generate(v.begin(), v.end(), [&distribution, &engine]{ return distribution(engine); });
-}
-
-// This version of "select" can only run sequentially, because the output
-// vector w is built consecutively during the traversal of the input vector v.
-template<class UnaryPredicate>
-std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
-{
-    std::vector<int> w;
-    // NOTE: trying to use back_inserter in parallel introduces a data race!
-    std::copy_if(v.begin(), v.end(), std::back_inserter(w), pred);
-    return w;
 }
