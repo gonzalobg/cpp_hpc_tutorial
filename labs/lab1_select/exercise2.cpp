@@ -22,26 +22,32 @@
  */
 
 #include <algorithm>
+#include <chrono>
 #include <numeric>
 #include <vector>
 #include <iterator>
 #include <iostream>
 #include <random>
-#if defined(__clang__)
-// clang does not support libstdc++ ranges
-#include <range/v3/all.hpp>
-namespace views = ranges::views;
-#elif __cplusplus >= 202002L
 #include <ranges>
-namespace views = std::views;
-#endif
+#include <execution>
+
+// Select elements and copy them to a new vector
+template<class UnaryPredicate>
+void select(const std::vector<int>& v, UnaryPredicate pred,
+            std::vector<size_t>& index, std::vector<int>& w)
+{
+    // TODO: write a parallelizable version of select, just as for exercise 1.
+    // But this time:
+    // - accept index and w as inputs to allow re-using the buffers
+    // - use transform_inclusive_scan to reduce the number of steps from 3 to 2.   
+}
 
 // Initialize vector
 void initialize(std::vector<int>& v);
 
-// Select elements and copy them to a new vector
-template<class UnaryPredicate>
-std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred);
+// Benchmarks the implementation
+template <typename Predicate>
+void bench(std::vector<int>& v, Predicate&& predicate, std::vector<size_t>& index, std::vector<int>& w);
 
 int main(int argc, char* argv[])
 {
@@ -60,16 +66,22 @@ int main(int argc, char* argv[])
     initialize(v);
 
     auto predicate = [](int x) { return x % 3 == 0; };
-    auto w = select(v, predicate);
+    std::vector<size_t> index;
+    std::vector<int> w; 
+    select(v, predicate, index, w);
     if (!std::all_of(w.begin(), w.end(), predicate) || w.empty()) {
         std::cerr << "ERROR!" << std::endl;
         return 1;
     }
     std::cerr << "OK!" << std::endl;
 
-    std::cout << "w = ";
-    std::copy(w.begin(), w.end(), std::ostream_iterator<int>(std::cout, " "));
-    std::cout << std::endl;
+    if (n < 40) {
+        std::cout << "w = ";
+        std::copy(w.begin(), w.end(), std::ostream_iterator<int>(std::cout, " "));
+        std::cout << std::endl;
+    }
+    
+    bench(v, predicate, index, w);
 
     return 0;
 }
@@ -81,13 +93,19 @@ void initialize(std::vector<int>& v)
     std::generate(v.begin(), v.end(), [&distribution, &engine]{ return distribution(engine); });
 }
 
-template<class UnaryPredicate>
-std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
-{
-    // TODO: write a parallelizable version of select, just as for exercise 1.
-    // But this time, use transform_inclusive_scan to reduce the number of steps from 3 to 2.
-                  
-    std::vector<int> w;
-    return w;
+template <typename Predicate>
+void bench(std::vector<int>& v, Predicate&& predicate, std::vector<size_t>& index, std::vector<int>& w) {
+  // Measure bandwidth in [GB/s]
+  using clk_t = std::chrono::steady_clock;
+  select(v, predicate, index, w);
+  auto start = clk_t::now();
+  int nit = 100;
+  for (int it = 0; it < nit; ++it) {
+    select(v, predicate, index, w);
+  }
+  auto seconds = std::chrono::duration<double>(clk_t::now() - start).count(); // Duration in [s]
+  // Amount of bytes transferred from/to chip.
+  // v is read (int), written to index (size_t), then v and index are read (int, size_t), and written to w (int):
+  auto gigabytes = (3. * sizeof(int) + 2. * sizeof(size_t)) * (double)v.size() * (double)nit * 1.e-9; // GB
+  std::cerr << "Bandwidth [GB/s]: " << (gigabytes / seconds) << std::endl;
 }
-

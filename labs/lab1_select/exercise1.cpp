@@ -27,21 +27,30 @@
 #include <iterator>
 #include <iostream>
 #include <random>
-#if defined(__clang__)
-// clang does not support libstdc++ ranges
-#include <range/v3/all.hpp>
-namespace views = ranges::views;
-#elif __cplusplus >= 202002L
 #include <ranges>
-namespace views = std::views;
-#endif
-
-// Initialize vector
-void initialize(std::vector<int>& v);
+// TODO: add C++ standard library includes as necessary
+// #include <...>
 
 // Select elements and copy them to a new vector
 template<class UnaryPredicate>
-std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred);
+std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
+{
+    // TODO: Allow this version of the code to run in parallel, proceeding in three steps:
+    std::vector<char> v_sel(v.size());
+    // 1. Fill v_sel with 0/1 values, depending on the outcome of the unary predicatea.
+
+    std::vector<size_t> index(v.size());
+    // 2. Compute the cumulative sum of v_sel using inclusive_scan.
+
+    size_t numElem = index.empty() ? 0 : index.back();
+    std::vector<int> w(numElem);
+    // 3. Use for_each to copy the selected elements from v to w.
+                  
+    return w;
+}
+
+// Initialize vector
+void initialize(std::vector<int>& v);
 
 int main(int argc, char* argv[])
 {
@@ -79,21 +88,4 @@ void initialize(std::vector<int>& v)
     auto distribution = std::uniform_int_distribution<int> {0, 100};
     auto engine = std::mt19937 {1};
     std::generate(v.begin(), v.end(), [&distribution, &engine]{ return distribution(engine); });
-}
-
-template<class UnaryPredicate>
-std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
-{
-    // TODO: Allow this version of the code to run in parallel, proceeding in three steps:
-    std::vector<char> v_sel(v.size());
-    // 1. Fill v_sel with 0/1 values, depending on the outcome of the unary predicatea.
-
-    std::vector<size_t> index(v.size());
-    // 2. Compute the cumulative sum of v_sel using inclusive_scan.
-
-    size_t numElem = index.empty() ? 0 : index.back();
-    std::vector<int> w(numElem);
-    // 3. Use for_each to copy the selected elements from v to w.
-                  
-    return w;
 }

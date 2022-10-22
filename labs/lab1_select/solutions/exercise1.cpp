@@ -22,27 +22,44 @@
  */
 
 #include <algorithm>
-#include <execution>
 #include <numeric>
 #include <vector>
 #include <iterator>
 #include <iostream>
 #include <random>
-#if defined(__clang__)
-// clang does not support libstdc++ ranges
-#include <range/v3/all.hpp>
-namespace views = ranges::views;
-#elif __cplusplus >= 202002L
 #include <ranges>
-namespace views = std::views;
-#endif
-
-// Initialize vector
-void initialize(std::vector<int>& v);
+// DONE: add C++ standard library includes as necessary
+#include <execution>
 
 // Select elements and copy them to a new vector
 template<class UnaryPredicate>
-std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred);
+std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
+{
+    // DONE: Allow this version of the code to run in parallel, proceeding in three steps:
+    std::vector<char> v_sel(v.size());
+    // 1. Fill v_sel with 0/1 values, depending on the outcome of the unary predicatea.
+    std::transform(std::execution::par, v.begin(), v.end(), v_sel.begin(),
+                   [pred](int x) { return pred(x) ? (char)1 : (char)0; });
+
+    std::vector<size_t> index(v.size());
+    // 2. Compute the cumulative sum of v_sel using inclusive_scan.
+    std::inclusive_scan(std::execution::par, v_sel.begin(), v_sel.end(), index.begin(), std::plus<size_t>{});
+
+    size_t numElem = index.empty() ? 0 : index.back();
+    std::vector<int> w(numElem);
+
+    // 3. Use for_each to copy the selected elements from v to w.
+    auto ints = std::views::iota(0, (int)v.size());
+    std::for_each(std::execution::par, ints.begin(), ints.end(),
+        [pred, v=v.data(), w=w.data(), index=index.data()](int i) {
+            if (pred(v[i])) w[index[i] - 1] = v[i];
+    });
+              
+    return w;
+}
+
+// Initialize vector
+void initialize(std::vector<int>& v);
 
 int main(int argc, char* argv[])
 {
@@ -80,40 +97,4 @@ void initialize(std::vector<int>& v)
     auto distribution = std::uniform_int_distribution<int> {0, 100};
     auto engine = std::mt19937 {1};
     std::generate(v.begin(), v.end(), [&distribution, &engine]{ return distribution(engine); });
-}
-
-template<class UnaryPredicate>
-std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
-{
-    std::vector<char> v_sel(v.size());
-    std::transform(std::execution::par, v.begin(), v.end(), v_sel.begin(),
-                   [pred](int x) { return pred(x) ? (char)1 : (char)0; });
-
-    std::vector<size_t> index(v.size());
-    std::inclusive_scan(std::execution::par, v_sel.begin(), v_sel.end(), index.begin(), std::plus<size_t>{});
-
-    size_t numElem = index.empty() ? 0 : index.back();
-    std::vector<int> w(numElem);
-
-#if __cplusplus >= 202002L || defined(__clang__)
-    // In C++20 or newer, or with range-v3, we can use the iota view:
-    auto ints = views::iota(0, (int)v.size());
-    std::for_each(std::execution::par, ints.begin(), ints.end(),
-                  [pred, v=v.data(), w=w.data(), index=index.data()](int i)
-        {
-            if (pred(v[i])) w[index[i] - 1] = v[i];
-        });
-#else
-    // Otherwise, we compute indices from the pointers:
-    std::for_each(std::execution::par, v.begin(), v.end(),
-                  [pred, v=v.data(), w=w.data(), index=index.data()](int const& x)
-        {
-            if (pred(x)) {
-                size_t i = &x - v;
-                w[index[i] - 1] = x;
-            }
-        });
-#endif
-                  
-    return w;
 }
