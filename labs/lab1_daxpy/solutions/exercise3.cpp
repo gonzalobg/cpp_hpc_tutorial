@@ -27,24 +27,27 @@
 #include <limits>
 #include <string>
 #include <vector>
-// DONE: add C++ standard library includes as necessary
 #include <algorithm>
+#include <ranges>
+// DONE: add C++ standard library includes as necessary
+#include <execution>
 
 /// Intialize vectors `x` and `y`: raw loop sequential version
 void initialize(std::vector<double> &x, std::vector<double> &y) {
   assert(x.size() == y.size());
-  for (std::size_t i = 0; i < x.size(); ++i) {
-    x[i] = (double)i;
-    y[i] = 2.;
-  }
+  // DONE: Parallelize initialization of `x`. Notice that `x.data()` is captured by value.
+  auto ints = std::views::iota(0);
+  std::for_each_n(std::execution::par_unseq, ints.begin(), x.size(), [x = x.data()](int i) { x[i] = (double)i; });
+  // DONE: Parallelize initialization of `y`
+  std::fill_n(std::execution::par_unseq, y.begin(), y.size(), 2.);
 }
 
 /// DAXPY: AX + Y: sequential algorithm version
 void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
   assert(x.size() == y.size());
-  // DONE: Implement using SEQUENTIAL transform algorithm
-  std::transform(x.begin(), x.end(), y.begin(), y.begin(),
-                 [&](double x, double y) { return a * x + y; });
+  /// DONE: Parallelize DAXPY computation. Notice that `a` is captured by value.
+  std::transform(std::execution::par_unseq, x.begin(), x.end(), y.begin(), y.begin(),
+                 [a](double x, double y) { return a * x + y; });
 }
 
 // Check solution
@@ -86,7 +89,8 @@ int main(int argc, char *argv[]) {
   auto seconds = std::chrono::duration<double>(clk_t::now() - start).count(); // Duration in [s]
   // Amount of bytes transferred from/to chip.
   // x is read, y is read and written:
-  auto gigabytes = 3. * (double)x.size() * (double)sizeof(double) * (double)nit * 1.e-9; // GB
+  auto gigabytes =
+      static_cast<double>((x.size() + 2 * y.size()) * sizeof(double) * nit) / 1.e9; // GB
   std::cerr << "Bandwidth [GB/s]: " << (gigabytes / seconds) << std::endl;
 
   return 0;

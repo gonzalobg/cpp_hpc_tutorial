@@ -22,42 +22,44 @@
  */
 
 #include <algorithm>
-#include <chrono>
 #include <numeric>
 #include <vector>
 #include <iterator>
 #include <iostream>
 #include <random>
 #include <ranges>
+// DONE: add C++ standard library includes as necessary
 #include <execution>
 
 // Select elements and copy them to a new vector
 template<class UnaryPredicate>
-void select(const std::vector<int>& v, UnaryPredicate pred, 
-            std::vector<size_t>& index, std::vector<int>& w)
+std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
 {
-    // transform_inclusive_scan first filters the data with a "transform" operation
-    // and then computes an inclusive cumulative operation (here a sum).
-    index.resize(v.size());
-    std::transform_inclusive_scan(std::execution::par, v.begin(), v.end(), index.begin(), std::plus<size_t>{},
-                                  [pred](int x) { return pred(x) ? 1 : 0; });
+    // DONE: Allow this version of the code to run in parallel, proceeding in three steps:
+    std::vector<char> v_sel(v.size());
+    // 1. Fill v_sel with 0/1 values, depending on the outcome of the unary predicatea.
+    std::transform(std::execution::par, v.begin(), v.end(), v_sel.begin(),
+                   [pred](int x) { return pred(x) ? (char)1 : (char)0; });
+
+    std::vector<size_t> index(v.size());
+    // 2. Compute the cumulative sum of v_sel using inclusive_scan.
+    std::inclusive_scan(std::execution::par, v_sel.begin(), v_sel.end(), index.begin(), std::plus<size_t>{});
 
     size_t numElem = index.empty() ? 0 : index.back();
-    w.resize(numElem);
+    std::vector<int> w(numElem);
 
+    // 3. Use for_each to copy the selected elements from v to w.
     auto ints = std::views::iota(0, (int)v.size());
     std::for_each(std::execution::par, ints.begin(), ints.end(),
         [pred, v=v.data(), w=w.data(), index=index.data()](int i) {
             if (pred(v[i])) w[index[i] - 1] = v[i];
     });
+              
+    return w;
 }
 
 // Initialize vector
 void initialize(std::vector<int>& v);
-
-// Benchmarks the implementation
-template <typename Predicate>
-void bench(std::vector<int>& v, Predicate&& predicate, std::vector<size_t>& index, std::vector<int>& w);
 
 int main(int argc, char* argv[])
 {
@@ -76,22 +78,16 @@ int main(int argc, char* argv[])
     initialize(v);
 
     auto predicate = [](int x) { return x % 3 == 0; };
-    std::vector<size_t> index;
-    std::vector<int> w;                       
-    select(v, predicate, index, w);
+    auto w = select(v, predicate);
     if (!std::all_of(w.begin(), w.end(), predicate) || w.empty()) {
         std::cerr << "ERROR!" << std::endl;
         return 1;
     }
     std::cerr << "OK!" << std::endl;
 
-    if (n < 40) {
-        std::cout << "w = ";
-        std::copy(w.begin(), w.end(), std::ostream_iterator<int>(std::cout, " "));
-        std::cout << std::endl;
-    }
-    
-    bench(v, predicate, index, w);
+    std::cout << "w = ";
+    std::copy(w.begin(), w.end(), std::ostream_iterator<int>(std::cout, " "));
+    std::cout << std::endl;
 
     return 0;
 }
@@ -101,21 +97,4 @@ void initialize(std::vector<int>& v)
     auto distribution = std::uniform_int_distribution<int> {0, 100};
     auto engine = std::mt19937 {1};
     std::generate(v.begin(), v.end(), [&distribution, &engine]{ return distribution(engine); });
-}
-
-template <typename Predicate>
-void bench(std::vector<int>& v, Predicate&& predicate, std::vector<size_t>& index, std::vector<int>& w) {
-  // Measure bandwidth in [GB/s]
-  using clk_t = std::chrono::steady_clock;
-  select(v, predicate, index, w);
-  auto start = clk_t::now();
-  int nit = 100;
-  for (int it = 0; it < nit; ++it) {
-    select(v, predicate, index, w);
-  }
-  auto seconds = std::chrono::duration<double>(clk_t::now() - start).count(); // Duration in [s]
-  // Amount of bytes transferred from/to chip.
-  // v is read (int), written to index (size_t), then v and index are read (int, size_t), and written to w (int):
-  auto gigabytes = (3. * sizeof(int) + 2. * sizeof(size_t)) * (double)v.size() * (double)nit * 1.e-9; // GB
-  std::cerr << "Bandwidth [GB/s]: " << (gigabytes / seconds) << std::endl;
 }

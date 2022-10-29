@@ -28,24 +28,17 @@
 #include <iostream>
 #include <random>
 #include <ranges>
-// TODO: add C++ standard library includes as necessary
-// #include <...>
 
-// Select elements and copy them to a new vector
+// Select elements and copy them to a new vector.
+//
+// This version of "select" can only run sequentially, because the output
+// vector w is built consecutively during the traversal of the input vector v.
 template<class UnaryPredicate>
 std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
 {
-    // TODO: Allow this version of the code to run in parallel, proceeding in three steps:
-    std::vector<char> v_sel(v.size());
-    // 1. Fill v_sel with 0/1 values, depending on the outcome of the unary predicatea.
-
-    std::vector<size_t> index(v.size());
-    // 2. Compute the cumulative sum of v_sel using inclusive_scan.
-
-    size_t numElem = index.empty() ? 0 : index.back();
-    std::vector<int> w(numElem);
-    // 3. Use for_each to copy the selected elements from v to w.
-                  
+    // TODO Instead of the line below, create a vector w and use a "copy_if" algorithm
+    // call to copy all elements from v to w that are selected by the unary predicate.
+    auto w = v;
     return w;
 }
 
