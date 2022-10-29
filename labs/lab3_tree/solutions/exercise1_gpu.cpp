@@ -34,36 +34,22 @@
 #include <thread>
 #include <utility>
 #include <vector>
-
-#if defined(__clang__)
-// clang does not support libstdc++ ranges
-#include <range/v3/all.hpp>
-namespace views = ranges::views;
-#elif defined(__NVCOMPILER)
-// Workaround: cuda::atomic requires C++17 so no ranges; fixed in next release.
-#include <thrust/iterator/counting_iterator.h>
-#else
 #include <ranges>
-namespace views = std::views;
-#endif
-
-// DONE: need to add some headers
-#include <atomic>
-
+// DONE: add C++ standard library includes as necessary
+// NOTE: We include std::atomic except when -stdpar=gpu, in which case we include cuda::atomic
 #if defined(_NVHPC_STDPAR_GPU)
 #include <cuda/atomic>
-#include <cuda/std/atomic>
 template <typename T> using atomic = cuda::atomic<T, cuda::thread_scope_device>;
 constexpr auto memory_order_relaxed = cuda::memory_order_relaxed;
 constexpr auto memory_order_acquire = cuda::memory_order_acquire;
 constexpr auto memory_order_release = cuda::memory_order_release;
-#else
+#else // _NVHPC_STDPAR_GPU
 #include <atomic>
 template <typename T> using atomic = std::atomic<T>;
 constexpr auto memory_order_relaxed = std::memory_order_relaxed;
 constexpr auto memory_order_acquire = std::memory_order_acquire;
 constexpr auto memory_order_release = std::memory_order_release;
-#endif
+#endif // _NVHPC_STDPAR_GPU
 
 /// Builds a trie in parallel by splitting the input into chunks
 void do_trie(std::vector<char> const &input, int domains);
@@ -140,14 +126,9 @@ void do_trie(std::vector<char> const &input, int domains) {
   using clk_t = std::chrono::steady_clock;
   auto const begin = clk_t::now();
 
-#if defined(__NVCOMPILER)
-  auto it = thrust::counting_iterator<int>(0);
-#else
-  auto it = views::iota(0).begin();
-#endif
   // DONE: process all domains in parallel
   // NOTE: we cannot use "par_unseq" here because the algorithm is starvation free.
-  std::for_each_n(std::execution::par, it, domains,
+  std::for_each_n(std::execution::par, std::views::iota(0).begin(), domains,
                   [t, b, domains, input = input.data(), size = input.size()](auto domain) {
                     make_trie(*t, *b, input, input + size, domain, domains);
                   });
