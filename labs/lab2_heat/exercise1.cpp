@@ -23,33 +23,15 @@
 
 //! Solves heat equation in 2D, see the README.
 
-#include <algorithm>
 #include <cassert>
 #include <chrono>
-#include <execution>
 #include <fstream>
 #include <iostream>
 #include <mpi.h>
-#include <numeric> // for std::transform_reduce
-#include <utility> // for std::pair
 #include <vector>
-// TODO: add includes for threads, barriers, and atomics
-
-#if defined(__NVCOMPILER)
-#include <thrust/iterator/counting_iterator.h>
-#elif defined(__clang__) || __cplusplus < 202002L
-// clang does not support libstdc++ ranges
-#include <range/v3/all.hpp>
-namespace views = ranges::views;
-
-// clang does not support libstdc++ ranges
-#include <range/v3/all.hpp>
-namespace views = ranges::views;
-#elif __cplusplus >= 202002L
-#include <ranges>
-namespace views = std::views;
-namespace ranges = std::ranges;
-#endif
+#include <cartesian_product.hpp> // Brings C++23 std::views::cartesian_product to C++20
+// TODO: add C++ standard library includes as necessary
+// #include <...>
 
 // Problem parameters
 struct parameters {
@@ -59,128 +41,48 @@ struct parameters {
 
   static constexpr double alpha() { return 1.0; } // Thermal diffusivity
 
-  parameters(int argc, char *argv[]) {
-    if (argc != 4) {
-      std::cerr << "ERROR: incorrect arguments" << std::endl;
-      std::cerr << "  " << argv[0] << " <nx> <ny> <ni>" << std::endl;
-      std::terminate();
-    }
-    nx = std::stoll(argv[1]);
-    ny = std::stoll(argv[2]);
-    ni = std::stoll(argv[3]);
-    dx = 1.0 / nx;
-    dt = dx * dx / (5. * alpha());
-  }
-
-  long nit() const { return ni; }
-  long nout() const { return 1000; }
-  long nx_global() const { return nx * nranks; }
-  long ny_global() const { return ny; }
-  double gamma() const { return alpha() * dt / (dx * dx); }
+  parameters(int argc, char *argv[]);
+    
+  long nit() { return ni; }
+  long nout() { return 1000; }
+  long nx_global() { return nx * nranks; }
+  long ny_global() { return ny; }
+  double gamma() { return alpha() * dt / (dx * dx); }
+  long n() { return ny * (nx + 2 /* 2 halo layers */); }
 };
 
-// Index into the memory using row-major order:
-long index(long x, long y, parameters p) {
-  assert(x >= 0 && x < p.nx);
-  assert(y >= 0 && y < p.ny);
-  return x * p.ny + y;
-};
-
-// Finite-difference stencil
-double stencil(double *u_new, double *u_old, long x, long y, parameters p) {
-  auto idx = [=](auto x, auto y) { return index(x, y, p); };
-  // Apply boundary conditions:
-  if (y == 1) {
-    u_old[idx(x, y - 1)] = 0;
-  }
-  if (y == (p.ny - 2)) {
-    u_old[idx(x, y + 1)] = 0;
-  }
-  // These boundary conditions are only impossed by the ranks at the end of the domain:
-  if (p.rank == 0 && x == 1) {
-    u_old[idx(x - 1, y)] = 1;
-  }
-  if (p.rank == (p.nranks - 1) && x == p.nx) {
-    u_old[idx(x + 1, y)] = 0;
-  }
-
-  u_new[idx(x, y)] = (1. - 4. * p.gamma()) * u_old[idx(x, y)] +
-                     p.gamma() * (u_old[idx(x + 1, y)] + u_old[idx(x - 1, y)] +
-                                  u_old[idx(x, y + 1)] + u_old[idx(x, y - 1)]);
-
-  return u_new[idx(x, y)] * p.dx * p.dx;
-}
+double stencil(double* u_new, double* u_old, long x, long y, parameters p);
 
 // 2D grid of indicies
 struct grid {
-  long x_start, x_end, y_start, y_end;
+  long x_begin, x_end, y_begin, y_end;
 };
 
-double stencil(double *u_new, double *u_old, grid g, parameters p) {
-  // Map the 2D strided iteration space (x0, xN) * (y0, yN) to 1D
-  long dx = g.x_end - g.x_start;
-  long dy = g.y_end - g.y_start;
-  long n = dx * dy; // #of elements
-#if defined(__NVCOMPILER)
-  // With NVHPC we can use Thrust's counting iterator
-  auto b = thrust::counting_iterator<long>(0);
-  auto e = thrust::counting_iterator<long>(n);
-#else
-  auto ints = views::iota((long)0, n);
-  auto b = ints.begin();
-  auto e = ints.end();
-#endif
-
-  // Recover the 2D strided iteration space from the 1D iteration space
-  auto split = [x_start = g.x_start, y_start = g.y_start, dy](long i) -> std::pair<long, long> {
-    return {i / dy + x_start, i % dy + y_start};
-  };
-
-  return std::transform_reduce(std::execution::par, b, e, 0.,
-                               // Binary reduction
-                               std::plus<>{},
-                               // Unary Transform
-                               [=, u_old = u_old, u_new = u_new](long i) {
-                                 auto [x, y] = split(i);
-                                 return stencil(u_new, u_old, x, y, p);
-                               });
+double apply_stencil(double* u_new, double* u_old, grid g, parameters p) {
+  // TODO: implement using parallel algorithms
+  // double energy = 0.;
+  // for (long x = g.x_begin; x < g.x_end; ++x) {
+  //   for (long y = g.y_begin; y < g.y_end; ++y) {
+  //     energy += stencil(u_new, u_old, x, y, p);
+  //   }
+  // }
+  // return energy;
+  return 0.0;
 }
 
-double internal(double *u_new, double *u_old, parameters p) {
-  grid g{.x_start = 2, .x_end = p.nx, .y_start = 1, .y_end = p.ny - 1};
-  return stencil(u_new, u_old, g, p);
+// Initial condition
+void initial_condition(double* u_new, double* u_old, long n) {
+  // TODO: implement using parallel algorithms
+  // for (long i = 0; i < n; ++i) {
+  //  u_old[i] = 0.;
+  //  u_new[i] = 0.;
+  // }
 }
 
-double prev_boundary(double *u_new, double *u_old, parameters p) {
-  // Send window cells, receive halo cells
-  if (p.rank > 0) {
-    // Send bottom boundary to bottom rank
-    MPI_Send(u_old + p.ny, p.ny, MPI_DOUBLE, p.rank - 1, 0, MPI_COMM_WORLD);
-    // Receive top boundary from bottom rank
-    MPI_Recv(u_old + 0, p.ny, MPI_DOUBLE, p.rank - 1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-  }
-  // Compute prev boundary
-  grid g{.x_start = 1, .x_end = 2, .y_start = 1, .y_end = p.ny - 1};
-  return stencil(u_new, u_old, g, p);
-}
-
-double next_boundary(double *u_new, double *u_old, parameters p) {
-  if (p.rank < p.nranks - 1) {
-    // Receive bottom boundary from top rank
-    MPI_Recv(u_old + (p.nx + 1) * p.ny, p.ny, MPI_DOUBLE, p.rank + 1, 0, MPI_COMM_WORLD,
-             MPI_STATUS_IGNORE);
-    // Send top boundary to top rank, and
-    MPI_Send(u_old + p.nx * p.ny, p.ny, MPI_DOUBLE, p.rank + 1, 1, MPI_COMM_WORLD);
-  }
-  // Compute next boundary
-  grid g{.x_start = p.nx, .x_end = p.nx + 1, .y_start = 1, .y_end = p.ny - 1};
-  return stencil(u_new, u_old, g, p);
-}
-
-void initialize(double *u_new, double *u_old, long n) {
-  std::fill_n(std::execution::par_unseq, u_new, n, 0.);
-  std::fill_n(std::execution::par_unseq, u_new, n, 0.);
-}
+// These evolve the solution of different parts of the local domain.
+double inner(double* u_new, double *u_old, parameters p);
+double prev (double* u_new, double *u_old, parameters p); 
+double next (double* u_new, double *u_old, parameters p);
 
 int main(int argc, char *argv[]) {
   // Parse CLI parameters
@@ -197,48 +99,39 @@ int main(int argc, char *argv[]) {
   MPI_Comm_rank(MPI_COMM_WORLD, &p.rank);
 
   // Allocate memory
-  long n = (p.nx + 2) * p.ny; // Needs to allocate 2 halo layers
-  auto u_new = std::vector<double>(n);
-  auto u_old = std::vector<double>(n);
-
+  std::vector<double> u_new(p.n()), u_old(p.n());
+ 
   // Initial condition
-  initialize(u_new.data(), u_old.data(), n);
+  initial_condition(u_new.data(), u_old.data(), p.n());
 
   // Time loop
   using clk_t = std::chrono::steady_clock;
   auto start = clk_t::now();
 
-  // TODO: use an atomic variable for the energy
-  double energy = 0.;
+  for (long it = 0; it < p.nit(); ++it) {
+    // Evolve the solution:
+    double energy = 
+        prev(u_new.data(), u_old.data(), p) +
+        next(u_new.data(), u_old.data(), p) +
+        inner(u_new.data(), u_old.data(), p);
 
-  // TODO: use a barrier for synchronization
-  // ...bar = ...
-
-  // TODO: use threads for the different computations
-  auto thread_prev = 0 /* std::thread([p, TODO: complete capture]() {
-      for (long it = 0; it < p.nit(); ++it) {
-          // TODO: perform the prev exchange and computation
-          // TODO: update the atomic energy
-          // TODO: synchronize with the barrier
-      }
-  })*/;
-
-  auto thread_next = 0 /* TODO: similar for prev */;
-
-  auto thread_internal = 0 /*
-    TODO: same as for next and prev
-    TODO: need to perform the reduction in one of the threads (for example this one)
-    TODO: need to reset the atomic in one of the threads (for example this one)
-  */;
-
-  // TODO: join all threads
+    // Reduce the energy across all neighbors to the rank == 0, and print it if necessary:
+    MPI_Reduce(p.rank == 0 ? MPI_IN_PLACE : &energy, &energy, 1, MPI_DOUBLE, MPI_SUM, 0,
+               MPI_COMM_WORLD);
+    if (p.rank == 0 && it % p.nout() == 0) {
+      std::cerr << "E(t=" << it * p.dt << ") = " << energy << std::endl;
+    }
+    std::swap(u_new, u_old);
+  }
 
   auto time = std::chrono::duration<double>(clk_t::now() - start).count();
-  auto grid_size = static_cast<double>(p.nx * p.ny * sizeof(double) * 2) / 1e9; // GB
+  auto grid_size = static_cast<double>(p.nx * p.ny * sizeof(double) * 2) * 1e-9; // GB
   auto memory_bw = grid_size * static_cast<double>(p.nit()) / time;             // GB/s
   if (p.rank == 0) {
-    std::cerr << "Domain " << p.nx << "x" << p.ny << " (" << grid_size << " GB): " << memory_bw
-              << " GB/s" << std::endl;
+    std::cerr << "Rank " << p.rank << ": local domain " << p.nx << "x" << p.ny << " (" << grid_size << " GB): " 
+              << memory_bw << " GB/s" << std::endl;
+    std::cerr << "All ranks: global domain " << p.nx_global() << "x" << p.ny_global() << " (" << (grid_size * p.nranks) << " GB): " 
+              << memory_bw * p.nranks << " GB/s" << std::endl; 
   }
 
   // Write output to file
@@ -261,6 +154,86 @@ int main(int argc, char *argv[]) {
   MPI_File_close(&f);
 
   MPI_Finalize();
-
   return 0;
+}
+
+// Reads command line arguments to initialize problem size
+parameters::parameters(int argc, char *argv[]) {
+  if (argc != 4) {
+    std::cerr << "ERROR: incorrect arguments" << std::endl;
+    std::cerr << "  " << argv[0] << " <nx> <ny> <ni>" << std::endl;
+    std::terminate();
+  }
+  nx = std::stoll(argv[1]);
+  ny = std::stoll(argv[2]);
+  ni = std::stoll(argv[3]);
+  dx = 1.0 / nx;
+  dt = dx * dx / (5. * alpha());
+}
+
+// Finite-difference stencil
+double stencil(double *u_new, double *u_old, long x, long y, parameters p) {
+  auto idx = [=](auto x, auto y) { 
+      // Index into the memory using row-major order:
+      assert(x >= 0 && x < 2 * p.nx);
+      assert(y >= 0 && y < p.ny);
+      return x * p.ny + y;
+  };
+  // Apply boundary conditions:
+  if (y == 1) {
+    u_old[idx(x, y - 1)] = 0;
+  }
+  if (y == (p.ny - 2)) {
+    u_old[idx(x, y + 1)] = 0;
+  }
+  // These boundary conditions are only impossed by the ranks at the end of the domain:
+  if (p.rank == 0 && x == 1) {
+    u_old[idx(x - 1, y)] = 1;
+  }
+  if (p.rank == (p.nranks - 1) && x == p.nx) {
+    u_old[idx(x + 1, y)] = 0;
+  }
+
+  u_new[idx(x, y)] = (1. - 4. * p.gamma()) * u_old[idx(x, y)] +
+                     p.gamma() * (u_old[idx(x + 1, y)] + u_old[idx(x - 1, y)] +
+                                  u_old[idx(x, y + 1)] + u_old[idx(x, y - 1)]);
+
+  return u_new[idx(x, y)] * p.dx * p.dx;
+}
+
+// Evolve the solution of the interior part of the domain
+// which does not depend on data from neighboring ranks
+double inner(double *u_new, double *u_old, parameters p) {
+  grid g{.x_begin = 2, .x_end = p.nx, .y_begin = 1, .y_end = p.ny - 1};
+  return apply_stencil(u_new, u_old, g, p);
+}
+
+// Evolve the solution of the part of the domain that 
+// depends on data from the previous MPI rank (rank - 1)
+double prev(double *u_new, double *u_old, parameters p) {
+  // Send window cells, receive halo cells
+  if (p.rank > 0) {
+    // Send bottom boundary to bottom rank
+    MPI_Send(u_old + p.ny, p.ny, MPI_DOUBLE, p.rank - 1, 0, MPI_COMM_WORLD);
+    // Receive top boundary from bottom rank
+    MPI_Recv(u_old + 0, p.ny, MPI_DOUBLE, p.rank - 1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+  }
+  // Compute prev boundary
+  grid g{.x_begin = 1, .x_end = 2, .y_begin = 1, .y_end = p.ny - 1};
+  return apply_stencil(u_new, u_old, g, p);
+}
+
+// Evolve the solution of the part of the domain that 
+// depends on data from the next MPI rank (rank + 1)
+double next(double *u_new, double *u_old, parameters p) {
+  if (p.rank < p.nranks - 1) {
+    // Receive bottom boundary from top rank
+    MPI_Recv(u_old + (p.nx + 1) * p.ny, p.ny, MPI_DOUBLE, p.rank + 1, 0, MPI_COMM_WORLD,
+             MPI_STATUS_IGNORE);
+    // Send top boundary to top rank, and
+    MPI_Send(u_old + p.nx * p.ny, p.ny, MPI_DOUBLE, p.rank + 1, 1, MPI_COMM_WORLD);
+  }
+  // Compute next boundary
+  grid g{.x_begin = p.nx, .x_end = p.nx + 1, .y_begin = 1, .y_end = p.ny - 1};
+  return apply_stencil(u_new, u_old, g, p);
 }
