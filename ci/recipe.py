@@ -24,11 +24,6 @@ Stage0 += gnu(version=gcc_ver, extra_repository=True)
 Stage0 += llvm(version=llvm_ver, upstream=True, extra_tools=True, toolset=True)
 Stage0 += cmake(eula=True, version='3.24.2')
 
-# Install NSight Systems and NSight Compute profilers
-# These are shipped with the HPC SDK containers now
-# Stage0 += nsight_systems(eula=True)
-# Stage0 += nsight_compute(eula=True)
-
 Stage0 += shell(commands=[
     'set -ex',  # Exit on first error and debug output
 
@@ -40,17 +35,16 @@ Stage0 += shell(commands=[
     'pip install --upgrade pip',
     'pip install numpy matplotlib conan gdown jupyterlab ipywidgets',
 
-    # Install latest versions of range-v3 and std::execution
+    # Install latest versions of range-v3 and NVIDIA std::execution
     'mkdir -p /var/tmp',
     'cd /var/tmp',
     'git clone https://github.com/ericniebler/range-v3.git',
-    'cp -r range-v3 /usr/local/range-v3',
+    'cp -r range-v3/include/* /usr/include/',
     'rm -rf range-v3',
-    'git clone https://github.com/brycelelbach/wg21_p2300_std_execution.git',
-    'cp -r wg21_p2300_std_execution /usr/local/execution',
-    'rm -rf wg21_p2300_std_execution',
+    'git clone https://github.com/nvidia/stdexec.git',
+    'cp -r stdexec/include/* /usr/include/',
+    'rm -rf stdexec',
     'cd -',
-    
 ])
 
 # libc++abi : make sure clang with -stdlib=libc++ can find it
@@ -60,9 +54,17 @@ Stage0 += shell(commands=[
 Stage0 += environment(variables={
     'LD_LIBRARY_PATH': f'/usr/lib/llvm-{llvm_ver}/lib:$LD_LIBRARY_PATH',
     'LIBRARY_PATH':    f'/usr/lib/llvm-{llvm_ver}/lib:$LIBRARY_PATH',
+    # Simplify running HPC-X on systems without InfiniBand
     'OMPI_MCA_coll_hcoll_enable':'0',
+    # We do not need VFS for the lab, and using it from a container in a 'generic' way is not trivial:
+    'UCX_VFS_ENABLE': 'n',
+    # Allow HPC-X to oversubscribe the CPU with more ranks than cores without using mpirun --oversubscribe
+    'OMPI_MCA_rmaps_base_oversubscribe' : 'true',
+    # Select matplotdir config directory to silence warning
+    'MPLCONFIGDIR': '/tmp/matplotlib',
 })
 Stage0 += copy(src='labs/', dest='/labs/')
+Stage0 += copy(src='include/cartesian_product.hpp', dest='/usr/include/cartesian_product.hpp')
 
 # Install Intel's OneAPI toolchain
 #Stage0 += packages(ospackages=['linux-headers-generic', 'intel-basekit', 'intel-hpckit'],

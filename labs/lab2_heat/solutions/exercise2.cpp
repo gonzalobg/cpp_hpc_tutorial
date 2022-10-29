@@ -29,6 +29,14 @@
 #include <iostream>
 #include <mpi.h>
 #include <vector>
+#include <cartesian_product.hpp> // Brings C++23 std::views::cartesian_product to C++20
+#include <algorithm> // For std::fill_n
+#include <numeric>   // For std::transform_reduce
+#include <execution> // For std::execution::par
+// DONE: add C++ standard library includes as necessary
+#include <thread>
+#include <atomic>
+#include <barrier>
 
 // Problem parameters
 struct parameters {
@@ -48,35 +56,18 @@ struct parameters {
   long n() { return ny * (nx + 2 /* 2 halo layers */); }
 };
 
-double stencil(double* u_new, double* u_old, long x, long y, parameters p);
-
 // 2D grid of indicies
 struct grid {
   long x_begin, x_end, y_begin, y_end;
 };
 
-double apply_stencil(double* u_new, double* u_old, grid g, parameters p) {
-  double energy = 0.;
-  for (long x = g.x_begin; x < g.x_end; ++x) {
-    for (long y = g.y_begin; y < g.y_end; ++y) {
-      energy += stencil(u_new, u_old, x, y, p);
-    }
-  }
-  return energy;
-}
-
-// Initial condition
-void initial_condition(double* u_new, double* u_old, long n) {
-  for (long i = 0; i < n; ++i) {
-    u_old[i] = 0.;
-    u_new[i] = 0.;
-  }
-}
+double apply_stencil(double* u_new, double* u_old, grid g, parameters p);
+void initial_condition(double* u_new, double* u_old, long n);
 
 // These evolve the solution of different parts of the local domain.
-double inner(double* u_new, double *u_old, parameters p);
-double prev (double* u_new, double *u_old, parameters p); 
-double next (double* u_new, double *u_old, parameters p);
+double inner(double* u_new, double* u_old, parameters p);
+double prev (double* u_new, double* u_old, parameters p); 
+double next (double* u_new, double* u_old, parameters p);
 
 int main(int argc, char *argv[]) {
   // Parse CLI parameters
@@ -101,22 +92,74 @@ int main(int argc, char *argv[]) {
   // Time loop
   using clk_t = std::chrono::steady_clock;
   auto start = clk_t::now();
+    
+  // DONE: Use an atomic shared variable for the energy that can be safely modified from
+  //       multiple threads:
+  std::atomic<double> energy = 0.;
 
-  for (long it = 0; it < p.nit(); ++it) {
-    // Evolve the solution:
-    double energy = 
-        prev(u_new.data(), u_old.data(), p) +
-        next(u_new.data(), u_old.data(), p) +
-        inner(u_new.data(), u_old.data(), p);
+  // DONE: Use a shared barrier for synchronizing three threads:
+  std::barrier bar(3);
 
-    // Reduce the energy across all neighbors to the rank == 0, and print it if necessary:
-    MPI_Reduce(p.rank == 0 ? MPI_IN_PLACE : &energy, &energy, 1, MPI_DOUBLE, MPI_SUM, 0,
-               MPI_COMM_WORLD);
-    if (p.rank == 0 && it % p.nout() == 0) {
-      std::cerr << "E(t=" << it * p.dt << ") = " << energy << std::endl;
+  // DONE: Create three threads each running either "prev", "next", or "inner".
+  //       This demonstrates it for "prev":
+  std::thread thread_prev([p, u_new = u_new.data(), u_old = u_old.data(), 
+                           &energy, &bar /* DONE: capture clauses */]() mutable { // NOTE: the lambda mutates its captures
+      // DONE: Each thread loops over all time-steps
+      for (long it = 0; it < p.nit(); ++it) {
+          // DONE: Perform the appropriate computation: prev for this one thread
+          // and update the atomic energy:
+          energy += prev(u_new, u_old, p);
+          
+          // DONE: Synchronize this thread with other threads using the barrier.
+          bar.arrive_and_wait();
+          // NOTE: We need to do it twice to synchronize with the "inner" thread.
+          bar.arrive_and_wait();
+          
+          // NOTE: Every thread swaps its own local copy of the pointer to the variables.
+          std::swap(u_new, u_old);
+      }
+  });
+
+  std::thread thread_next([p, u_new = u_new.data(), u_old = u_old.data(), 
+                           &energy, &bar /* DONE: capture clauses */]() mutable {
+      // DONE: Same as for "prev", but for the "next" computation.
+      for (long it = 0; it < p.nit(); ++it) {
+          energy += next(u_new, u_old, p);
+          bar.arrive_and_wait();
+          bar.arrive_and_wait();
+          std::swap(u_new, u_old);
+      }
+  });
+
+  // DONE: In one of the threads we need to perform the MPI Reduction and I/O; we will do so on the "inner" thread.
+  std::thread thread_inner([p, u_new = u_new.data(), u_old = u_old.data(), 
+                            &energy, &bar /* DONE: capture clauses */]() mutable {
+    for (long it = 0; it < p.nit(); ++it) {
+      energy += inner(u_new, u_old, p);
+      // DONE: Arrive and Wait on the barrier to block until all three threads have modified the shared "energy" state.
+      bar.arrive_and_wait();
+    
+      // NOTE: Only one of the threads performs the MPI Reduction and I/O; we do so on the "inner" thread.
+      // Reduce the energy across all neighbors to the rank == 0, and print it if necessary:
+      MPI_Reduce(p.rank == 0 ? MPI_IN_PLACE : &energy, &energy, 1, MPI_DOUBLE, MPI_SUM, 0,
+                 MPI_COMM_WORLD);
+      if (p.rank == 0 && it % p.nout() == 0) {
+        std::cerr << "E(t=" << it * p.dt << ") = " << energy << std::endl;
+      }
+      std::swap(u_new, u_old);
+      
+      // NOTE: Need to reset the energy.
+      energy = 0;
+    
+      // DONE: Arrive and Wait on the barrier again to unblock all threads.
+      bar.arrive_and_wait();
     }
-    std::swap(u_new, u_old);
-  }
+  });
+
+  // DONE: join all threads
+  thread_prev.join();
+  thread_next.join();
+  thread_inner.join();
 
   auto time = std::chrono::duration<double>(clk_t::now() - start).count();
   auto grid_size = static_cast<double>(p.nx * p.ny * sizeof(double) * 2) * 1e-9; // GB
@@ -195,6 +238,37 @@ double stencil(double *u_new, double *u_old, long x, long y, parameters p) {
   return u_new[idx(x, y)] * p.dx * p.dx;
 }
 
+double apply_stencil(double* u_new, double* u_old, grid g, parameters p) {
+  auto xs = std::views::iota(g.x_begin, g.x_end);
+  auto ys = std::views::iota(g.y_begin, g.y_end);
+  auto ids = std::views::common(std::views::cartesian_product(xs, ys));
+    
+#if !defined(__NVCOMPILER)
+  return std::transform_reduce(
+    std::execution::par, ids.begin(), ids.end(), 
+    0., std::plus{}, [u_new, u_old, p](auto idx) {
+      auto [x, y] = idx;
+      return stencil(u_new, u_old, x, y, p);
+  });
+#else
+  // Workaround for NVIDIA C++ Compiler
+  auto is = std::views::iota((int)0, (int)std::size(ids));
+  auto cp = std::views::cartesian_product(xs, ys);
+  return std::transform_reduce(
+    std::execution::par, is.begin(), is.end(), 
+    0., std::plus{}, [u_new, u_old, p, ids = cp.begin()](auto i) {
+      auto [x, y] = ids[i];
+      return stencil(u_new, u_old, x, y, p);
+  });
+#endif
+}
+
+// Initial condition
+void initial_condition(double* u_new, double* u_old, long n) {
+  std::fill_n(std::execution::par, u_old, n, 0.0);
+  std::fill_n(std::execution::par, u_new, n, 0.0);
+}
+
 // Evolve the solution of the interior part of the domain
 // which does not depend on data from neighboring ranks
 double inner(double *u_new, double *u_old, parameters p) {
@@ -213,7 +287,7 @@ double prev(double *u_new, double *u_old, parameters p) {
     MPI_Recv(u_old + 0, p.ny, MPI_DOUBLE, p.rank - 1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   }
   // Compute prev boundary
-  grid g{.x_begin = 1, .x_end = 2, .y_begin = 1, .y_end = p.ny - 1};
+  grid g{.x_begin = 1, .x_end = 2, .y_begin= 1, .y_end = p.ny - 1};
   return apply_stencil(u_new, u_old, g, p);
 }
 
