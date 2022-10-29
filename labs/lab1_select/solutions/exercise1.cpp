@@ -28,33 +28,17 @@
 #include <iostream>
 #include <random>
 #include <ranges>
-// DONE: add C++ standard library includes as necessary
-#include <execution>
 
-// Select elements and copy them to a new vector
+// Select elements and copy them to a new vector.
+//
+// This version of "select" can only run sequentially, because the output
+// vector w is built consecutively during the traversal of the input vector v.
 template<class UnaryPredicate>
 std::vector<int> select(const std::vector<int>& v, UnaryPredicate pred)
 {
-    // DONE: Allow this version of the code to run in parallel, proceeding in three steps:
-    std::vector<char> v_sel(v.size());
-    // 1. Fill v_sel with 0/1 values, depending on the outcome of the unary predicatea.
-    std::transform(std::execution::par, v.begin(), v.end(), v_sel.begin(),
-                   [pred](int x) { return pred(x) ? (char)1 : (char)0; });
-
-    std::vector<size_t> index(v.size());
-    // 2. Compute the cumulative sum of v_sel using inclusive_scan.
-    std::inclusive_scan(std::execution::par, v_sel.begin(), v_sel.end(), index.begin(), std::plus<size_t>{});
-
-    size_t numElem = index.empty() ? 0 : index.back();
-    std::vector<int> w(numElem);
-
-    // 3. Use for_each to copy the selected elements from v to w.
-    auto ints = std::views::iota(0, (int)v.size());
-    std::for_each(std::execution::par, ints.begin(), ints.end(),
-        [pred, v=v.data(), w=w.data(), index=index.data()](int i) {
-            if (pred(v[i])) w[index[i] - 1] = v[i];
-    });
-              
+    std::vector<int> w;
+    // NOTE: trying to use back_inserter in parallel introduces a data race!
+    std::copy_if(v.begin(), v.end(), std::back_inserter(w), pred);
     return w;
 }
 

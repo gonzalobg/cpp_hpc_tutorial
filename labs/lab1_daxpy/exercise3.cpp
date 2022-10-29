@@ -21,29 +21,33 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <iostream>
 #include <limits>
 #include <string>
 #include <vector>
+#include <ranges>
 // TODO: add C++ standard library includes as necessary
 // #include <...>
 
-/// Intialize vectors `x` and `y`: raw loop sequential version
+/// Intialize vectors `x` and `y`: parallel algorithm version
 void initialize(std::vector<double> &x, std::vector<double> &y) {
   assert(x.size() == y.size());
-  for (std::size_t i = 0; i < x.size(); ++i) {
-    x[i] = (double)i;
-    y[i] = 2.;
-  }
+  // TODO: Parallelize initialization of `x`
+  auto ints = std::views::iota(0);
+  std::for_each_n(ints.begin(), x.size(), [&x](int i) { x[i] = (double)i; });
+  // TODO: Parallelize initialization of `y`
+  std::fill_n(y.begin(), y.size(), 2.);
 }
 
 /// DAXPY: AX + Y: sequential algorithm version
 void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
   assert(x.size() == y.size());
-  // TODO: Implement using SEQUENTIAL transform algorithm
-  // ...
+  /// TODO: Parallelize DAXPY computation
+  std::transform(x.begin(), x.end(), y.begin(), y.begin(),
+                 [&](double x, double y) { return a * x + y; });
 }
 
 // Check solution

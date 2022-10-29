@@ -27,23 +27,23 @@
 #include <limits>
 #include <string>
 #include <vector>
-#include <algorithm>
 // TODO: add C++ standard library includes as necessary
 // #include <...>
 
 /// Intialize vectors `x` and `y`: raw loop sequential version
 void initialize(std::vector<double> &x, std::vector<double> &y) {
   assert(x.size() == y.size());
-  // TODO: Initialize `x` using SEQUENTIAL std::for_each_n algorithm with std::views::iota
-  // TODO: Initialize `y` using SEQUENTIAL std::fill_n algorithm
+  for (std::size_t i = 0; i < x.size(); ++i) {
+    x[i] = (double)i;
+    y[i] = 2.;
+  }
 }
 
-/// DAXPY: AX + Y: raw loop sequential version
+/// DAXPY: AX + Y: sequential algorithm version
 void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
   assert(x.size() == y.size());
-  // DONE: Implement using SEQUENTIAL transform algorithm
-  std::transform(x.begin(), x.end(), y.begin(), y.begin(),
-                 [&](double x, double y) { return a * x + y; });
+  // TODO: Implement using SEQUENTIAL transform algorithm
+  // ...
 }
 
 // Check solution

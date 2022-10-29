@@ -27,18 +27,16 @@
 #include <limits>
 #include <string>
 #include <vector>
-#include <algorithm>
 // DONE: add C++ standard library includes as necessary
-#include <ranges>
+#include <algorithm>
 
 /// Intialize vectors `x` and `y`: raw loop sequential version
 void initialize(std::vector<double> &x, std::vector<double> &y) {
   assert(x.size() == y.size());
-  // DONE: Initialize `x` using SEQUENTIAL std::for_each_n algorithm with std::views::iota
-  auto ints = std::views::iota(0);
-  std::for_each_n(ints.begin(), x.size(), [&x](int i) { x[i] = (double)i; });
-  // DONE: Initialize `y` using SEQUENTIAL std::fill_n algorithm
-  std::fill_n(y.begin(), y.size(), 2.);
+  for (std::size_t i = 0; i < x.size(); ++i) {
+    x[i] = (double)i;
+    y[i] = 2.;
+  }
 }
 
 /// DAXPY: AX + Y: sequential algorithm version
