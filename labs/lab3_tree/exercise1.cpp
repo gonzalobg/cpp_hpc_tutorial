@@ -34,17 +34,9 @@
 #include <thread>
 #include <utility>
 #include <vector>
-
-#if defined(__clang__)
-// clang does not support libstdc++ ranges
-#include <range/v3/all.hpp>
-namespace views = ranges::views;
-#else
 #include <ranges>
-namespace views = std::views;
-#endif
-
-// TODO: need to add some headers
+// TODO: add C++ standard library includes as necessary
+// #include <...>
 
 /// Builds a trie in parallel by splitting the input into chunks
 void do_trie(std::vector<char> const &input, int domains);
@@ -121,9 +113,8 @@ void do_trie(std::vector<char> const &input, int domains) {
   using clk_t = std::chrono::steady_clock;
   auto const begin = clk_t::now();
 
-  auto it = views::iota(0).begin();
-  // TODO: process all domains in parallel
-  std::for_each_n(it, domains,
+  // TODO: Use a parallel algorithm to process all domains in parallel
+  std::for_each_n(std::views::iota(0).begin(), domains,
                   [t, b, domains, input = input.data(), size = input.size()](auto domain) {
                     make_trie(*t, *b, input, input + size, domain, domains);
                   });
