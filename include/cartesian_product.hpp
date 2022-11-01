@@ -1501,7 +1501,7 @@ namespace tl  {
          constexpr auto distance_to(cursor const& other) const {
 	   auto idx = linear();
 	   auto oidx = other.linear();
-           return static_cast<difference_type>(idx) - static_cast<difference_type>(oidx);
+           return static_cast<difference_type>(oidx) - static_cast<difference_type>(idx);
          }
 
          friend class cursor<!Const>;
@@ -1648,7 +1648,7 @@ namespace tl  {
          constexpr auto distance_to(cursor const& other) const {
 	   auto idx = linear();
 	   auto oidx = other.linear();
-           return static_cast<difference_type>(idx) - static_cast<difference_type>(oidx);
+	   return static_cast<difference_type>(oidx) - static_cast<difference_type>(idx);	   
          }
 
          friend class cursor<!Const>;
