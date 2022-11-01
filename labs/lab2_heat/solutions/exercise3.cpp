@@ -37,6 +37,9 @@
 #include <thread>
 #include <atomic>
 #include <barrier>
+#include <exec/static_thread_pool.hpp>
+
+namespace stde = ::stdexec;
 
 // Problem parameters
 struct parameters {
@@ -56,18 +59,34 @@ struct parameters {
   long n() { return ny * (nx + 2 /* 2 halo layers */); }
 };
 
-// 2D grid of indicies
-struct grid {
-  long x_begin, x_end, y_begin, y_end;
-};
-
-double apply_stencil(double* u_new, double* u_old, grid g, parameters p);
-void initial_condition(double* u_new, double* u_old, long n);
-
 // These evolve the solution of different parts of the local domain.
 double inner(double* u_new, double* u_old, parameters p);
 double prev (double* u_new, double* u_old, parameters p); 
 double next (double* u_new, double* u_old, parameters p);
+
+stde::sender auto iteration_step(stde::scheduler auto&& sch, parameters& p, long& it, std::vector<double>& u_new, std::vector<double>& u_old) {
+    auto prev_task = stde::schedule(sch) | stde::then([&] {
+      return prev(u_new.data(), u_old.data(), p);
+    });
+    auto next_task = stde::schedule(sch) | stde::then([&] {
+      return next(u_new.data(), u_old.data(), p);
+    });
+    auto inner_task = stde::schedule(sch) | stde::then([&] {
+      return inner(u_new.data(), u_old.data(), p);
+    });
+
+    return stde::when_all(prev_task, next_task, inner_task)
+         | stde::then([&](double e0, double e1, double e2) mutable {
+             double e = e0 + e1 + e2;
+             MPI_Reduce(p.rank == 0 ? MPI_IN_PLACE : &e, &e, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+             if (p.rank == 0 && it % p.nout() == 0) {
+               std::cerr << "E(t=" << it * p.dt << ") = " << e << std::endl;
+              }
+              std::swap(u_new, u_old);
+         });
+}
+
+void initial_condition(double* u_new, double* u_old, long n);
 
 int main(int argc, char *argv[]) {
   // Parse CLI parameters
@@ -89,77 +108,21 @@ int main(int argc, char *argv[]) {
   // Initial condition
   initial_condition(u_new.data(), u_old.data(), p.n());
 
+  // Initialize scheduler
+  exec::static_thread_pool ctx{3}; 
+    
   // Time loop
   using clk_t = std::chrono::steady_clock;
   auto start = clk_t::now();
+  
+  stde::scheduler auto sch = ctx.get_scheduler();
     
-  // DONE: Use an atomic shared variable for the energy that can be safely modified from
-  //       multiple threads:
-  std::atomic<double> energy = 0.;
-
-  // DONE: Use a shared barrier for synchronizing three threads:
-  std::barrier bar(3);
-
-  // DONE: Create three threads each running either "prev", "next", or "inner".
-  //       This demonstrates it for "prev":
-  std::thread thread_prev([p, u_new = u_new.data(), u_old = u_old.data(), 
-                           &energy, &bar /* DONE: capture clauses */]() mutable { // NOTE: the lambda mutates its captures
-      // DONE: Each thread loops over all time-steps
-      for (long it = 0; it < p.nit(); ++it) {
-          // DONE: Perform the appropriate computation: prev for this one thread
-          // and update the atomic energy:
-          energy += prev(u_new, u_old, p);
-          
-          // DONE: Synchronize this thread with other threads using the barrier.
-          bar.arrive_and_wait();
-          // NOTE: We need to do it twice to synchronize with the "inner" thread.
-          bar.arrive_and_wait();
-          
-          // NOTE: Every thread swaps its own local copy of the pointer to the variables.
-          std::swap(u_new, u_old);
-      }
-  });
-
-  std::thread thread_next([p, u_new = u_new.data(), u_old = u_old.data(), 
-                           &energy, &bar /* DONE: capture clauses */]() mutable {
-      // DONE: Same as for "prev", but for the "next" computation.
-      for (long it = 0; it < p.nit(); ++it) {
-          energy += next(u_new, u_old, p);
-          bar.arrive_and_wait();
-          bar.arrive_and_wait();
-          std::swap(u_new, u_old);
-      }
-  });
-
-  // DONE: In one of the threads we need to perform the MPI Reduction and I/O; we will do so on the "inner" thread.
-  std::thread thread_inner([p, u_new = u_new.data(), u_old = u_old.data(), 
-                            &energy, &bar /* DONE: capture clauses */]() mutable {
-    for (long it = 0; it < p.nit(); ++it) {
-      energy += inner(u_new, u_old, p);
-      // DONE: Arrive and Wait on the barrier to block until all three threads have modified the shared "energy" state.
-      bar.arrive_and_wait();
-    
-      // NOTE: Only one of the threads performs the MPI Reduction and I/O; we do so on the "inner" thread.
-      // Reduce the energy across all neighbors to the rank == 0, and print it if necessary:
-      MPI_Reduce(p.rank == 0 ? MPI_IN_PLACE : &energy, &energy, 1, MPI_DOUBLE, MPI_SUM, 0,
-                 MPI_COMM_WORLD);
-      if (p.rank == 0 && it % p.nout() == 0) {
-        std::cerr << "E(t=" << it * p.dt << ") = " << energy << std::endl;
-      }
-      std::swap(u_new, u_old);
-      
-      // NOTE: Need to reset the energy.
-      energy = 0;
-    
-      // DONE: Arrive and Wait on the barrier again to unblock all threads.
-      bar.arrive_and_wait();
-    }
-  });
-
-  // DONE: join all threads
-  thread_prev.join();
-  thread_next.join();
-  thread_inner.join();
+  // WIP: Do we have an equivalent of repeat_effect_until ?
+  long it = 0;
+  auto step = iteration_step(sch, p, it, u_new, u_old);
+  for (; it < p.nit(); ++it) {
+    stde::this_thread::sync_wait(step);   
+  }
 
   auto time = std::chrono::duration<double>(clk_t::now() - start).count();
   auto grid_size = static_cast<double>(p.nx * p.ny * sizeof(double) * 2) * 1e-9; // GB
@@ -193,6 +156,13 @@ int main(int argc, char *argv[]) {
   MPI_Finalize();
   return 0;
 }
+                                 
+// 2D grid of indicies
+struct grid {
+  long x_begin, x_end, y_begin, y_end;
+};
+
+double apply_stencil(double* u_new, double* u_old, grid g, parameters p);
 
 // Reads command line arguments to initialize problem size
 parameters::parameters(int argc, char *argv[]) {
