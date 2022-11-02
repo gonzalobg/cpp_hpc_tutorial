@@ -244,7 +244,7 @@ double stencil(double *u_new, double *u_old, long x, long y, parameters p) {
 double apply_stencil(double* u_new, double* u_old, grid g, parameters p) {
   auto xs = std::views::iota(g.x_begin, g.x_end);
   auto ys = std::views::iota(g.y_begin, g.y_end);
-  auto ids = std::views::common(std::views::cartesian_product(xs, ys));
+  auto ids = std::views::cartesian_product(xs, ys);
   return std::transform_reduce(
     std::execution::par, ids.begin(), ids.end(), 
     0., std::plus{}, [u_new, u_old, p](auto idx) {
