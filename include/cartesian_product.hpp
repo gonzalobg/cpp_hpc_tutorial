@@ -1413,23 +1413,6 @@ namespace tl  {
       template <bool Const>
       class cursor;
 
-      //Wraps the end iterator for the 0th range.
-      //This is all that's required because the cursor will only ever set the 0th iterator to end when
-      //the cartesian product operation has completed.
-      template <bool Const>
-      class sentinel {
-
-      public:
-         sentinel() = default;
-
-         //const-converting constructor
-         constexpr sentinel(sentinel<!Const> other) requires Const
-         {}
-
-         template <bool>
-         friend class cursor;
-      };
-
       template <bool Const>
       class cursor {
 	W x_i, y_i, z_i, x_0, y_0, z_0;
@@ -1494,10 +1477,6 @@ namespace tl  {
              return x_i == rhs.x_i && y_i == rhs.y_i && z_i == rhs.z_i;
          }
 
-         constexpr bool equal(const sentinel<Const>& s) const {
-	   return x_i == (x_0 + nx) && y_i == (y_0 + ny) && z_i == z_0;
-         }
-
          constexpr auto distance_to(cursor const& other) const {
 	   auto idx = linear();
 	   auto oidx = other.linear();
@@ -1528,20 +1507,20 @@ namespace tl  {
 	return basic_iterator{ cursor<true>(x_b, y_b, z_b, nx, ny, nz) };
       }
 
-      constexpr auto end() {
-         return sentinel<false>();
-      }
-
-      constexpr auto end() const {
-          return sentinel<true>();
-      }
-
       constexpr auto size() {
          return nx * ny * nz;
       }
 
       constexpr auto size() const {
          return nx * ny * nz;
+      }
+
+      constexpr auto end() {
+         return begin() + size();
+      }
+
+      constexpr auto end() const {
+	 return begin() + size();
       }
    };
   
@@ -1569,23 +1548,6 @@ namespace tl  {
 
       template <bool Const>
       class cursor;
-
-      //Wraps the end iterator for the 0th range.
-      //This is all that's required because the cursor will only ever set the 0th iterator to end when
-      //the cartesian product operation has completed.
-      template <bool Const>
-      class sentinel {
-
-      public:
-         sentinel() = default;
-
-         //const-converting constructor
-         constexpr sentinel(sentinel<!Const> other) requires Const
-         {}
-
-         template <bool>
-         friend class cursor;
-      };
 
       template <bool Const>
       class cursor {
@@ -1641,10 +1603,6 @@ namespace tl  {
              return x_i == rhs.x_i && y_i == rhs.y_i;
          }
 
-         constexpr bool equal(const sentinel<Const>& s) const {
-	   return x_i == (x_0 + nx) && y_i == y_0;
-         }
-
          constexpr auto distance_to(cursor const& other) const {
 	   auto idx = linear();
 	   auto oidx = other.linear();
@@ -1672,14 +1630,6 @@ namespace tl  {
          return basic_iterator{ cursor<true>(x_b, y_b, nx, ny) };
       }
 
-      constexpr auto end() {
-         return sentinel<false>();
-      }
-
-      constexpr auto end() const {
-          return sentinel<true>();
-      }
-
       constexpr auto size() {
          return nx * ny;
       }
@@ -1687,6 +1637,15 @@ namespace tl  {
       constexpr auto size() const {
          return nx * ny;
       }
+
+      constexpr auto end() {
+         return begin() + size();
+      }
+
+      constexpr auto end() const {
+	 return begin() + size();
+      }
+     
    };
 
   template <typename W, typename B>
@@ -1704,23 +1663,6 @@ namespace tl  {
 
       template <bool Const>
       class cursor;
-
-      //Wraps the end iterator for the 0th range.
-      //This is all that's required because the cursor will only ever set the 0th iterator to end when
-      //the cartesian product operation has completed.
-      template <bool Const>
-      class sentinel {
-
-      public:
-         sentinel() = default;
-
-         //const-converting constructor
-         constexpr sentinel(sentinel<!Const> other) requires Const
-         {}
-
-         template <bool>
-         friend class cursor;
-      };
 
       template <bool Const>
       class cursor {
@@ -1757,10 +1699,6 @@ namespace tl  {
 	   return x_i == rhs.x_i;
          }
 
-         constexpr bool equal(const sentinel<Const>&) const {
-	   return x_i == x_e;
-         }
-
          constexpr auto distance_to(cursor const& other) const {
             return static_cast<difference_type>(other.x_i - x_i);
          }
@@ -1783,20 +1721,20 @@ namespace tl  {
          return basic_iterator{ cursor<true>(x_i, x_e) };
       }
 
-      constexpr auto end() {
-         return sentinel<false>();
-      }
-
-      constexpr auto end() const {
-          return sentinel<true>();
-      }
-
       constexpr auto size() {
          return x_e - x_i;
       }
 
       constexpr auto size() const {
          return x_e - x_i;
+      }
+
+      constexpr auto end() {
+         return begin() + size();
+      }
+
+      constexpr auto end() const {
+	 return begin() + size();
       }
    };
 #endif // DISABLE_CART_PROD_IOTA_SPEC
