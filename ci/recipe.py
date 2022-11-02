@@ -62,6 +62,9 @@ Stage0 += environment(variables={
     'OMPI_MCA_rmaps_base_oversubscribe' : 'true',
     # Select matplotdir config directory to silence warning
     'MPLCONFIGDIR': '/tmp/matplotlib',
+    # DLI course needs to run as root:
+    'OMPI_ALLOW_RUN_AS_ROOT': '1',
+    'OMPI_ALLOW_RUN_AS_ROOT_CONFIRM': '1',
 })
 Stage0 += copy(src='labs/', dest='/labs/')
 Stage0 += copy(src='include/cartesian_product.hpp', dest='/usr/include/cartesian_product.hpp')
