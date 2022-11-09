@@ -65,6 +65,8 @@ Stage0 += environment(variables={
     # DLI course needs to run as root:
     'OMPI_ALLOW_RUN_AS_ROOT': '1',
     'OMPI_ALLOW_RUN_AS_ROOT_CONFIRM': '1',
+    # Workaround hwloc binding:
+    'OMPI_MCA_hwloc_base_binding_policy': 'none',
 })
 Stage0 += copy(src='labs/', dest='/labs/')
 Stage0 += copy(src='include/cartesian_product.hpp', dest='/usr/include/cartesian_product.hpp')
