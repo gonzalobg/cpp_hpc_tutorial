@@ -39,6 +39,15 @@ RUN_LAB="jupyter-lab \
 --FileContentsManager.checkpoints_kwargs='root_dir'=/tmp \
 --notebook-dir=/src/labs"
 
+if [ $1 = "docker-build" ] || [ $1 = "singularity-build" ]; then
+    if ! command -v hpccm ; then
+	echo "hpccm not found"
+	echo "It can be installed as a python package via 'pip install hpccm'"
+	echo "If it is already installed make sure it is in the PATH"
+	exit 1
+    fi
+fi
+
 case $1 in
     # Docker:
     docker-build)
@@ -50,7 +59,7 @@ case $1 in
     docker-serve)
 	mkdir -p target/local
 	docker run \
-	       -p ${PORT}:8888 \
+	       -p ${PORT}:${PORT} \
 	       -v "$(pwd)/target/local":"/.local" \
 	       $DOCKER_CMDS \
 	       bash -c "$RUN_LAB"
