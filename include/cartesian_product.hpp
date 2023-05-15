@@ -1197,12 +1197,15 @@ namespace tl  {
       class cursor {
          template<class T>
          using constify = std::conditional_t<Const, const T, T>;
-
+         template<class T>
+         using intify = std::conditional_t<true, int, T>;
 	 // Instead of storing a pointer to the views, we'll store the sentinels:
          // constify<std::tuple<Vs...>>* bases_;
          std::tuple<std::ranges::iterator_t<constify<Vs>>...> currents_{};
 	 std::tuple<std::ranges::iterator_t<constify<Vs>>...> begins_{}; 
 	 std::tuple<std::ranges::sentinel_t<constify<Vs>>...> ends_{};
+	 std::tuple<intify<Vs>...> counts_{};
+	 int idx_;
 
       public:
          using reference =
@@ -1217,6 +1220,8 @@ namespace tl  {
             : currents_( tl::tuple_transform(std::ranges::begin, *bases) )
 	    , begins_( currents_ )
 	    , ends_( tl::tuple_transform(std::ranges::end, *bases) )
+	    , counts_( tl::tuple_transform(std::ranges::size, *bases) )
+	    , idx_(0)
          {}
 
          //If the underlying ranges are common, we can get to the end by assigning from end
@@ -1246,66 +1251,36 @@ namespace tl  {
             return tuple_transform([](auto& i) -> decltype(auto) { return *i; }, currents_);
          }
 
+         template <std::size_t N = (sizeof...(Vs) - 1)>
+         void update(int idx) {
+	    if constexpr(N == 0)
+	      std::get<N>(currents_) = idx + std::get<N>(begins_);
+	    else
+	      std::get<N>(currents_) = idx % std::get<N>(counts_) + std::get<N>(begins_);
+	    if constexpr (N > 0) {
+	      idx /= std::get<N>(counts_);
+	      update<N-1>(idx);
+	    }
+	 }
+
          //Increment the iterator at std::get<N>(currents_)
          //If that iterator hits its end, recurse to std::get<N-1>
          template <std::size_t N = (sizeof...(Vs) - 1)>
          void next() {
-            auto& it = std::get<N>(currents_);
-            ++it;
-            if (it == std::get<N>(ends_)) {
-               if constexpr (N > 0) {
-                  it = std::get<N>(begins_);
-                  next<N - 1>();
-               }
-            }
+	     advance(1);
          }
 
          //Decrement the iterator at std::get<N>(currents_)
          //If that iterator was at its begin, cycle it to end and recurse to std::get<N-1>
          template <std::size_t N = (sizeof...(Vs) - 1)>
          void prev() requires (am_bidirectional<constify<Vs>...>) {
-            auto& it = std::get<N>(currents_);
-            if (it == std::get<N>(begins_)) {
-               std::ranges::advance(it, std::get<N>(ends_));
-               if constexpr (N > 0) {
-                  prev<N - 1>();
-               }
-            }
-            --it;
+	    advance(-1);
          }
 
          template <std::size_t N = (sizeof...(Vs) - 1)>
          void advance(difference_type n) requires (am_random_access<constify<Vs>...>) {
-            auto& it = std::get<N>(currents_);
-            auto begin = std::get<N>(begins_);
-            auto end = std::get<N>(ends_);
-            auto size = end - begin;
-
-            auto distance_from_begin = it - begin;
-
-            //Calculate where in the iterator cycle we should end up
-            auto offset = (distance_from_begin + n) % static_cast<difference_type>(size);
-
-            //Calculate how many times incrementing this iterator would cause it to cycle round
-            //This will be negative if we cycled by decrementing
-            auto times_cycled = (distance_from_begin + n) / size - (offset < 0 ? 1 : 0);
-
-            //Set the iterator to the correct new position
-            it = begin + (offset < 0 ? offset + static_cast<difference_type>(size) : offset);
-
-            if constexpr (N > 0) {
-               //If this iterator cycled, then we need to advance the N-1th iterator
-               //by the number of times it cycled
-               if (times_cycled != 0) {
-                  advance<N - 1>(times_cycled);
-               }
-            }
-            else {
-               //If we're the 0th iterator, then cycling should set the iterator to the end
-               if (times_cycled > 0) {
-		   std::ranges::advance(it, end);
-               }
-            }
+	    idx_ += n;
+	    update(idx_);
          }
 
          constexpr bool equal(const cursor& rhs) const
