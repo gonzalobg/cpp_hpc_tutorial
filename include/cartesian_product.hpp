@@ -1206,6 +1206,9 @@ namespace tl  {
 	 std::tuple<std::ranges::sentinel_t<constify<Vs>>...> ends_{};
 	 std::tuple<intify<Vs>...> counts_{};
 	 int idx_;
+         // FIXME: This won't work when iterators are different, is there any common base type?
+	 std::tuple_element_t<0, decltype(currents_)> x[sizeof...(Vs)], xb[sizeof...(Vs)];
+	 int xc[sizeof...(Vs)];
 
       public:
          using reference =
@@ -1216,13 +1219,23 @@ namespace tl  {
          using difference_type = std::ptrdiff_t;
 
          cursor() = default;
+
          constexpr explicit cursor(constify<std::tuple<Vs...>>* bases)
             : currents_( tl::tuple_transform(std::ranges::begin, *bases) )
 	    , begins_( currents_ )
 	    , ends_( tl::tuple_transform(std::ranges::end, *bases) )
 	    , counts_( tl::tuple_transform(std::ranges::size, *bases) )
 	    , idx_(0)
-         {}
+         { init(); }
+
+         template <std::size_t N = (sizeof...(Vs) - 1)>
+         void init() {
+           x[N] = std::get<N>(currents_);
+	   xb[N] = std::get<N>(begins_);
+	   xc[N] = std::get<N>(counts_);
+           if constexpr(N > 0)
+	     init<N-1>();
+         }
 
          //If the underlying ranges are common, we can get to the end by assigning from end
          constexpr explicit cursor(as_sentinel_t, constify<std::tuple<Vs...>>* bases)
@@ -1252,13 +1265,26 @@ namespace tl  {
          }
 
          template <std::size_t N = (sizeof...(Vs) - 1)>
-         void update(int idx) {
+         void update_(int idx) {
 	    if constexpr(N == 0)
 	      std::get<N>(currents_) = idx + std::get<N>(begins_);
 	    else
 	      std::get<N>(currents_) = idx % std::get<N>(counts_) + std::get<N>(begins_);
 	    if constexpr (N > 0) {
 	      idx /= std::get<N>(counts_);
+	      update<N-1>(idx);
+	    }
+	 }
+         // Update iterators without using touples.
+         template <std::size_t N = (sizeof...(Vs) - 1)>
+         void update(int idx) {
+	    if constexpr(N == 0)
+	      x[N] = idx + xb[N];
+	    else
+	      x[N] = idx % xc[N] + xb[N];
+	    std::get<N>(currents_) = x[N];
+	    if constexpr (N > 0) {
+	      idx /= xc[N];
 	      update<N-1>(idx);
 	    }
 	 }
