@@ -28,9 +28,10 @@ SING_CMDS="\
   ${SING_IMG} \
 "
 
-#RUN_LAB="source /opt/intel/oneapi/setvars.sh intel64 && jupyter-lab \
+RUN_LAB="source /opt/nvidia/hpc_sdk/Linux_x86_64/23.5/comm_libs/12.1/hpcx/latest/hpcx-mt-init.sh && hpcx_load &&"
+#RUN_LAB="$RUN_LAB source /opt/intel/oneapi/setvars.sh intel64 &&"
 
-RUN_LAB="source /opt/nvidia/hpc_sdk/Linux_x86_64/23.5/comm_libs/12.1/hpcx/latest/hpcx-mt-init.sh && hpcx_load && jupyter-lab \
+RUN_LAB="$RUN_LAB jupyter-lab \
 --no-browser \
 --allow-root \
 --ip=0.0.0.0 \

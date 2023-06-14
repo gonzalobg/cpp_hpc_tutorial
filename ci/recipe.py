@@ -37,9 +37,9 @@ Stage0 += shell(commands=[
 
     # Install required python packages for the notebooks
     'pip install --upgrade pip',
-    'pip install numpy matplotlib gdown jupyterlab ipywidgets pandas seaborn',
+    'pip install numpy matplotlib gdown jupyterlab ipywidgets pandas seaborn conan',
 
-    # Install latest versions of range-v3,  NVIDIA std::execution, and NVTX3
+    # Install latest versions of range-v3, NVIDIA std::execution, and NVTX3
     'mkdir -p /var/tmp',
     'cd /var/tmp',
     'git clone --depth=1 https://github.com/ericniebler/range-v3.git',
