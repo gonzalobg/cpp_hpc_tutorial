@@ -61,6 +61,7 @@ struct grid {
 };
 
 double apply_stencil(double* u_new, double* u_old, grid g, parameters p) {
+  // DONE: implement using parallel algorithms
   auto xs = std::views::iota(g.x_begin, g.x_end);
   auto ys = std::views::iota(g.y_begin, g.y_end);
   auto ids = std::views::cartesian_product(xs, ys);
@@ -74,6 +75,7 @@ double apply_stencil(double* u_new, double* u_old, grid g, parameters p) {
 
 // Initial condition
 void initial_condition(double* u_new, double* u_old, long n) {
+  // DONE: implement using parallel algorithms
   std::fill_n(std::execution::par, u_old, n, 0.0);
   std::fill_n(std::execution::par, u_new, n, 0.0);
 }
@@ -148,7 +150,7 @@ int main(int argc, char *argv[]) {
     MPI_File_iwrite_at(f, 2 * sizeof(long), &time, 1, MPI_DOUBLE, &req[2]);
   }
   auto values_offset = header_bytes + p.rank * values_bytes_per_rank;
-  MPI_File_iwrite_at(f, values_offset, u_new.data() + p.ny, values_per_rank, MPI_DOUBLE, &req[0]);
+  MPI_File_iwrite_at(f, values_offset, u_old.data() + p.ny, values_per_rank, MPI_DOUBLE, &req[0]);
   MPI_Waitall(p.rank == 0 ? 3 : 1, req, MPI_STATUSES_IGNORE);
   MPI_File_close(&f);
 
@@ -174,7 +176,7 @@ parameters::parameters(int argc, char *argv[]) {
 double stencil(double *u_new, double *u_old, long x, long y, parameters p) {
   auto idx = [=](auto x, auto y) { 
       // Index into the memory using row-major order:
-      assert(x >= 0 && x < 2 * p.nx);
+      assert(x >= 0 && x < (p.nx + 2));
       assert(y >= 0 && y < p.ny);
       return x * p.ny + y;
   };
