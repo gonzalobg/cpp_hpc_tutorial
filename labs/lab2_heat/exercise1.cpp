@@ -149,7 +149,7 @@ int main(int argc, char *argv[]) {
     MPI_File_iwrite_at(f, 2 * sizeof(long), &time, 1, MPI_DOUBLE, &req[2]);
   }
   auto values_offset = header_bytes + p.rank * values_bytes_per_rank;
-  MPI_File_iwrite_at(f, values_offset, u_new.data() + p.ny, values_per_rank, MPI_DOUBLE, &req[0]);
+  MPI_File_iwrite_at(f, values_offset, u_old.data() + p.ny, values_per_rank, MPI_DOUBLE, &req[0]);
   MPI_Waitall(p.rank == 0 ? 3 : 1, req, MPI_STATUSES_IGNORE);
   MPI_File_close(&f);
 

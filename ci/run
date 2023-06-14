@@ -9,6 +9,7 @@ PORT=8888
 DOCKER_CMDS="\
   --gpus=all \
   --privileged \
+  --ulimit memlock=-1 \
   -u $(id -u):$(id -g) \
   -h $(hostname) \
   -v $(pwd):/src \
@@ -29,7 +30,7 @@ SING_CMDS="\
 
 #RUN_LAB="source /opt/intel/oneapi/setvars.sh intel64 && jupyter-lab \
 
-RUN_LAB="jupyter-lab \
+RUN_LAB="source /opt/nvidia/hpc_sdk/Linux_x86_64/23.5/comm_libs/12.1/hpcx/latest/hpcx-mt-init.sh && hpcx_load && jupyter-lab \
 --no-browser \
 --allow-root \
 --ip=0.0.0.0 \

@@ -3,13 +3,12 @@ HPCCM development container for the C++ HPC tutorial
 https://github.com/NVIDIA/hpc-container-maker/
 """
 import platform
-nvhpc_ver = '22.11'
-cuda_ver = '11.8'
+nvhpc_ver = '23.5'
+cuda_ver = '12.1'
 gcc_ver = '12'
-llvm_ver = '16'
+llvm_ver = '17'
 
 Stage0 += baseimage(image = f'nvcr.io/nvidia/nvhpc:{nvhpc_ver}-devel-cuda{cuda_ver}-ubuntu22.04')
-#Stage0 += baseimage(image = f'nvcr.io/nvidia/nvhpc:{nvhpc_ver}-devel-cuda_multi-ubuntu22.04')
 
 arch = 'x86_64'
 if platform.machine() == 'aarch64':
