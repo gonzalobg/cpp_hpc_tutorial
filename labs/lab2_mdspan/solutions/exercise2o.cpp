@@ -33,8 +33,25 @@
 #include <algorithm> // For std::fill_n
 #include <numeric>   // For std::transform_reduce
 #include <execution> // For std::execution::par
-// TODO: add C++ standard library includes as necessary
-// #include <...>
+#define MDSPAN_USE_PAREN_OPERATOR 1
+#include <mdspan>
+
+namespace stdex = std::experimental;
+
+using grid_extents = stdex::extents<std::size_t, stdex::dynamic_extent, stdex::dynamic_extent>;
+
+// NOTE! This was layout_right in Exercise 1o; the goal of this exercise is to be able to 
+// change this at will without impacting the application results:
+// using grid_layout = stdex::layout_right;
+using grid_layout = stdex::layout_left;
+
+using grid_t = stdex::mdspan<double, grid_extents, grid_layout>;
+
+// DONE: create grid layout alias called grid_io_layout for file I/O that is always layout_right
+using grid_io_layout = stdex::layout_right;
+
+// DONE: create an alias called grid_out_t for an mdspan of doubles with two dynamic extents and using grid_io_layout
+using grid_out_t = stdex::mdspan<double, grid_extents, grid_io_layout>;
 
 // Problem parameters
 struct parameters {
@@ -54,18 +71,35 @@ struct parameters {
   long n() { return ny * (nx + 2 /* 2 halo layers */); }
 };
 
+double stencil(double* u_new, double* u_old, long x, long y, parameters p);
+
 // 2D grid of indicies
 struct grid {
   long x_begin, x_end, y_begin, y_end;
 };
 
-double apply_stencil(double* u_new, double* u_old, grid g, parameters p);
-void initial_condition(double* u_new, double* u_old, long n);
+double apply_stencil(grid_t u_new, grid_t u_old, grid g, parameters p) {
+  auto xs = std::views::iota(g.x_begin, g.x_end);
+  auto ys = std::views::iota(g.y_begin, g.y_end);
+  auto ids = std::views::cartesian_product(xs, ys);
+  return std::transform_reduce(
+    std::execution::par, ids.begin(), ids.end(), 
+    0., std::plus{}, [u_new, u_old, p](auto idx) {
+      auto [x, y] = idx;
+      return stencil(u_new, u_old, x, y, p);
+  });
+}
+
+// Initial condition
+void initial_condition(grid_t u_new, grid_t u_old) {
+  std::fill_n(std::execution::par, u_old.data_handle(), u_old.size(), 0.0);
+  std::fill_n(std::execution::par, u_new.data_handle(), u_new.size(), 0.0);
+}
 
 // These evolve the solution of different parts of the local domain.
-double inner(double* u_new, double* u_old, parameters p);
-double prev (double* u_new, double* u_old, parameters p); 
-double next (double* u_new, double* u_old, parameters p);
+double inner(grid_t u_new, grid_t u_old, parameters p);
+double prev (grid_t u_new, grid_t u_old, parameters p); 
+double next (grid_t u_new, grid_t u_old, parameters p);
 
 int main(int argc, char *argv[]) {
   // Parse CLI parameters
@@ -82,24 +116,24 @@ int main(int argc, char *argv[]) {
   MPI_Comm_rank(MPI_COMM_WORLD, &p.rank);
 
   // Allocate memory
-  std::vector<double> u_new(p.n()), u_old(p.n());
+  std::vector<double> u_new_data(p.n()), u_old_data(p.n());
+
+  grid_t u_new{u_new_data.data(), p.nx+2, p.ny};
+  grid_t u_old{u_old_data.data(), p.nx+2, p.ny};
  
   // Initial condition
-  initial_condition(u_new.data(), u_old.data(), p.n());
+  initial_condition(u_new, u_old);
 
   // Time loop
   using clk_t = std::chrono::steady_clock;
   auto start = clk_t::now();
 
-  // NOTE: We are going to replace Exercise 1 time-loop on the calling thread with 
-  //       three threads, each with its own timeloop (see below for step-by-step TODOs).
-  /* 
   for (long it = 0; it < p.nit(); ++it) {
     // Evolve the solution:
     double energy = 
-        prev(u_new.data(), u_old.data(), p) +
-        next(u_new.data(), u_old.data(), p) +
-        inner(u_new.data(), u_old.data(), p);
+        prev(u_new, u_old, p) +
+        next(u_new, u_old, p) +
+        inner(u_new, u_old, p);
 
     // Reduce the energy across all neighbors to the rank == 0, and print it if necessary:
     MPI_Reduce(p.rank == 0 ? MPI_IN_PLACE : &energy, &energy, 1, MPI_DOUBLE, MPI_SUM, 0,
@@ -109,63 +143,6 @@ int main(int argc, char *argv[]) {
     }
     std::swap(u_new, u_old);
   }
-  */
-
-// TODO: remove this #if - endif par to start working on the exerise
-#if 0
-  // TODO: Use an atomic shared variable for the energy that can be safely modified from
-  //       multiple threads:
-  double energy = 0.;
-
-  // TODO: Use a shared barrier for synchronizing three threads:
-  // ... bar(...);
-
-  // TODO: Create three threads each running either "prev", "next", or "inner".
-  //       This demonstrates it for "prev":
-  std::thread thread_prev([p, u_new = u_new.data(), u_old = u_old.data(), 
-                           &energy /* TODO: capture clauses */]() mutable { // NOTE: the lambda mutates its captures
-      // NOTE: Each thread loops over all time-steps
-      for (long it = 0; it < p.nit(); ++it) {
-          // TODO: Perform the appropriate computation: prev for this one thread
-          // and update the atomic energy:
-          energy += prev(u_new, u_old, p);
-          // TODO: Synchronize this thread with other threads using the barrier.
-          
-          // NOTE: Every thread swaps its own local copy of the pointer to the variables.
-          std::swap(u_new, u_old);
-      }
-  });
-
-  std::thread thread_next([p, u_new = u_new.data(), u_old = u_old.data(), 
-                           &energy /* TODO: capture clauses */]() mutable {
-      // TODO: Same as for "prev", but for the "next" computation.
-  });
-
-  // TODO: In one of the threads we need to perform the MPI Reduction and I/O; we will do so on the "inner" thread.
-  std::thread thread_inner([p, u_new = u_new.data(), u_old = u_old.data(),
-                            &energy /* TODO: capture clauses */]() mutable {
-    for (long it = 0; it < p.nit(); ++it) {
-      // TODO: Same as for "prev", but for "inner".
-      // TODO: Arrive and Wait on the barrier to block until all three threads have modified the shared "energy" state.
-    
-      // NOTE: Only one of the threads performs the MPI Reduction and I/O; we do so on the "inner" thread.
-      // Reduce the energy across all neighbors to the rank == 0, and print it if necessary:
-      MPI_Reduce(p.rank == 0 ? MPI_IN_PLACE : &energy, &energy, 1, MPI_DOUBLE, MPI_SUM, 0,
-                 MPI_COMM_WORLD);
-      if (p.rank == 0 && it % p.nout() == 0) {
-        std::cerr << "E(t=" << it * p.dt << ") = " << energy << std::endl;
-      }
-      std::swap(u_new, u_old);
-      
-      // NOTE: Need to reset the energy.
-      energy = 0;
-    
-      // TODO: Arrive and Wait on the barrier again to unblock all threads.
-    }
-  });
-#endif
-    
-  // TODO: join all threads
 
   auto time = std::chrono::duration<double>(clk_t::now() - start).count();
   auto grid_size = static_cast<double>(p.nx * p.ny * sizeof(double) * 2) * 1e-9; // GB
@@ -192,7 +169,20 @@ int main(int argc, char *argv[]) {
     MPI_File_iwrite_at(f, 2 * sizeof(long), &time, 1, MPI_DOUBLE, &req[2]);
   }
   auto values_offset = header_bytes + p.rank * values_bytes_per_rank;
-  MPI_File_iwrite_at(f, values_offset, u_old.data() + p.ny, values_per_rank, MPI_DOUBLE, &req[0]);
+  // DONE: Allocate space for storing data in output format
+  auto u_out_data = std::vector<double>(p.n());
+  // DONE: create an mdspan for u_out using grid_out_t
+  grid_out_t u_out{u_out_data.data(), p.nx+2, p.ny};
+  // DONE: copy data from grid_t layout to grid_out_t layout using a parallel algorithm:
+  auto is = std::views::iota(0, (int)u_out.extent(0));
+  auto js = std::views::iota(0, (int)u_out.extent(1));
+  auto ids = std::views::cartesian_product(is, js);
+  std::for_each(std::execution::par, ids.begin(), ids.end(), [u_out, u_old](auto idx) {
+     auto [i, j] = idx;
+     u_out(i, j) = u_old(i, j);
+  });
+  // DONE: pass the io data to MPI_File_iwrite_at
+  MPI_File_iwrite_at(f, values_offset, u_out.data_handle() + p.ny, values_per_rank, MPI_DOUBLE, &req[0]);
   MPI_Waitall(p.rank == 0 ? 3 : 1, req, MPI_STATUSES_IGNORE);
   MPI_File_close(&f);
 
@@ -215,69 +205,54 @@ parameters::parameters(int argc, char *argv[]) {
 }
 
 // Finite-difference stencil
-double stencil(double *u_new, double *u_old, long x, long y, parameters p) {
-  auto idx = [=](auto x, auto y) { 
-      // Index into the memory using row-major order:
-      assert(x >= 0 && x < 2 * p.nx);
-      assert(y >= 0 && y < p.ny);
-      return x * p.ny + y;
-  };
-  // Apply boundary conditions:
+double stencil(grid_t u_new, grid_t u_old, long x, long y, parameters p) {
   if (y == 1) {
-    u_old[idx(x, y - 1)] = 0;
+    u_old(x, y-1) = 0;
   }
   if (y == (p.ny - 2)) {
-    u_old[idx(x, y + 1)] = 0;
+    u_old(x, y+1) = 0;
   }
   // These boundary conditions are only impossed by the ranks at the end of the domain:
   if (p.rank == 0 && x == 1) {
-    u_old[idx(x - 1, y)] = 1;
+    u_old(x-1, y) = 1;
   }
   if (p.rank == (p.nranks - 1) && x == p.nx) {
-    u_old[idx(x + 1, y)] = 0;
+    u_old(x+1, y) = 0;
   }
 
-  u_new[idx(x, y)] = (1. - 4. * p.gamma()) * u_old[idx(x, y)] +
-                     p.gamma() * (u_old[idx(x + 1, y)] + u_old[idx(x - 1, y)] +
-                                  u_old[idx(x, y + 1)] + u_old[idx(x, y - 1)]);
+  u_new(x, y) = (1. - 4. * p.gamma()) * u_old(x, y) + p.gamma() * (u_old(x+1, y) + u_old(x-1, y) +
+                                                                   u_old(x, y+1) + u_old(x, y-1));
 
-  return u_new[idx(x, y)] * p.dx * p.dx;
-}
-
-double apply_stencil(double* u_new, double* u_old, grid g, parameters p) {
-  auto xs = std::views::iota(g.x_begin, g.x_end);
-  auto ys = std::views::iota(g.y_begin, g.y_end);
-  auto ids = std::views::cartesian_product(xs, ys);
-  return std::transform_reduce(
-    std::execution::par, ids.begin(), ids.end(), 
-    0., std::plus{}, [u_new, u_old, p](auto idx) {
-      auto [x, y] = idx;
-      return stencil(u_new, u_old, x, y, p);
-  });
-}
-
-// Initial condition
-void initial_condition(double* u_new, double* u_old, long n) {
-  std::fill_n(std::execution::par, u_old, n, 0.0);
-  std::fill_n(std::execution::par, u_new, n, 0.0);
+  return u_new(x, y) * p.dx * p.dx;
 }
 
 // Evolve the solution of the interior part of the domain
 // which does not depend on data from neighboring ranks
-double inner(double *u_new, double *u_old, parameters p) {
+double inner(grid_t u_new, grid_t u_old, parameters p) {
   grid g{.x_begin = 2, .x_end = p.nx, .y_begin = 1, .y_end = p.ny - 1};
   return apply_stencil(u_new, u_old, g, p);
 }
 
 // Evolve the solution of the part of the domain that 
 // depends on data from the previous MPI rank (rank - 1)
-double prev(double *u_new, double *u_old, parameters p) {
+double prev(grid_t u_new, grid_t u_old, parameters p) {
+  // DONE: allocate data for transmitting and receiving halos:
+  thread_local std::vector<double> halos_tx((std::size_t)p.ny);
+  thread_local std::vector<double> halos_rx((std::size_t)p.ny);
   // Send window cells, receive halo cells
   if (p.rank > 0) {
+    // DONE: copy halos to transmit into the transmit buffer
+    std::for_each_n(std::execution::par, std::views::iota(0).begin(), p.ny, [halos_tx = halos_tx.data(), u_old](int i) {
+       halos_tx[i] = u_old(1, i); 
+    });
     // Send bottom boundary to bottom rank
-    MPI_Send(u_old + p.ny, p.ny, MPI_DOUBLE, p.rank - 1, 0, MPI_COMM_WORLD);
+    MPI_Send(u_old.data_handle() + p.ny, p.ny, MPI_DOUBLE, p.rank - 1, 0, MPI_COMM_WORLD);
     // Receive top boundary from bottom rank
-    MPI_Recv(u_old + 0, p.ny, MPI_DOUBLE, p.rank - 1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(u_old.data_handle() + 0, p.ny, MPI_DOUBLE, p.rank - 1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    // DONE: copy data from the receive buffer into the grid
+    std::for_each_n(std::execution::par, std::views::iota(0).begin(), p.ny, [halo_rx = halos_rx.data(), u_old](int i) {
+       u_old(0, i) = halos_rx[i]; 
+    });
   }
   // Compute prev boundary
   grid g{.x_begin = 1, .x_end = 2, .y_begin= 1, .y_end = p.ny - 1};
@@ -286,13 +261,25 @@ double prev(double *u_new, double *u_old, parameters p) {
 
 // Evolve the solution of the part of the domain that 
 // depends on data from the next MPI rank (rank + 1)
-double next(double *u_new, double *u_old, parameters p) {
+double next(grid_t u_new, grid_t u_old, parameters p) {
+  // TODO: Allocate data for transmitting and receiving halos:
+  thread_local std::vector<double> halos_tx((std::size_t)p.ny);
+  thread_local std::vector<double> halos_rx((std::size_t)p.ny);
+    
   if (p.rank < p.nranks - 1) {
+    // DONE: Copy halos to transmit into the transmit buffer
+    std::for_each_n(std::execution::par, std::views::iota(0).begin(), p.ny, [halos_tx = halos_tx.data(), u_old, p](int i) {
+       halos_tx[i] = u_old(p.nx, i); 
+    });
     // Receive bottom boundary from top rank
-    MPI_Recv(u_old + (p.nx + 1) * p.ny, p.ny, MPI_DOUBLE, p.rank + 1, 0, MPI_COMM_WORLD,
+    MPI_Recv(u_old.data_handle() + (p.nx + 1) * p.ny, p.ny, MPI_DOUBLE, p.rank + 1, 0, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
     // Send top boundary to top rank, and
-    MPI_Send(u_old + p.nx * p.ny, p.ny, MPI_DOUBLE, p.rank + 1, 1, MPI_COMM_WORLD);
+    MPI_Send(u_old.data_handle() + p.nx * p.ny, p.ny, MPI_DOUBLE, p.rank + 1, 1, MPI_COMM_WORLD);
+    // DONE: Copy received halos to the u_old solution buffer
+    std::for_each_n(std::execution::par, std::views::iota(0).begin(), p.ny, [halos_rx = halos_rx.data(), u_old, p](int i) {
+       u_old(p.nx+1, i) = halos_rx[i]; 
+    });
   }
   // Compute next boundary
   grid g{.x_begin = p.nx, .x_end = p.nx + 1, .y_begin = 1, .y_end = p.ny - 1};
