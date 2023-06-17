@@ -34,12 +34,10 @@
 #include <numeric>   // For std::transform_reduce
 #include <execution> // For std::execution::par
 // DONE: add C++ standard library includes as necessary
-#include <thread>
-#include <atomic>
-#include <barrier>
 #include <exec/static_thread_pool.hpp>
 #include <exec/on.hpp>
 
+// DONE: add stde namespace alias for stdexec
 namespace stde = ::stdexec;
 
 // Problem parameters
@@ -66,6 +64,7 @@ double prev (double* u_new, double* u_old, parameters p);
 double next (double* u_new, double* u_old, parameters p);
 
 stde::sender auto iteration_step(stde::scheduler auto&& sch, parameters& p, long& it, std::vector<double>& u_new, std::vector<double>& u_old) {
+    // DONE: create task for prev, next, inner
     auto prev_task = stde::just() | exec::on(sch, stde::then([&] {
       return prev(u_new.data(), u_old.data(), p);
     }));
@@ -76,6 +75,8 @@ stde::sender auto iteration_step(stde::scheduler auto&& sch, parameters& p, long
       return inner(u_new.data(), u_old.data(), p);
     }));
 
+    // DONE: use "when_all" to wait on prev, next, and inner
+    // DONE: use "then" to perform the MPI reduction
     return stde::when_all(prev_task, next_task, inner_task)
          | stde::then([&](double e0, double e1, double e2) mutable {
              double e = e0 + e1 + e2;
@@ -109,19 +110,20 @@ int main(int argc, char *argv[]) {
   // Initial condition
   initial_condition(u_new.data(), u_old.data(), p.n());
 
-  // Initialize scheduler
+  // DONE: Initialize a exec::static_thread_pool context with 3 threads
   exec::static_thread_pool ctx{3}; 
     
   // Time loop
   using clk_t = std::chrono::steady_clock;
   auto start = clk_t::now();
-  
+
+  // DONE: get an scheduler from the context
   stde::scheduler auto sch = ctx.get_scheduler();
     
-  // WIP: Do we have an equivalent of repeat_effect_until ?
   long it = 0;
   auto step = iteration_step(sch, p, it, u_new, u_old);
   for (; it < p.nit(); ++it) {
+    // DONE: block calling  thread on executing a step
     stde::sync_wait(step);
   }
 
