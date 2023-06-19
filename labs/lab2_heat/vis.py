@@ -18,10 +18,11 @@ def visualize(name = 'output'):
     values = values.reshape((nx, ny))
 
     print(f'Plotting grid {nx}x{ny}, t = {time}')
+    print(values.shape)
 
     plt.title(f'Temperature at t = {time:.3f} [s]')
     plt.xlabel('x')
     plt.ylabel('y')
-    plt.pcolormesh(values, cmap=plt.cm.jet, vmin=0, vmax=values.max())
+    plt.pcolormesh(values, cmap=plt.cm.jet, vmin=0.0, vmax=values.max())
     plt.colorbar()
     plt.savefig('output.png', transparent=True, bbox_inches='tight', dpi=300)
