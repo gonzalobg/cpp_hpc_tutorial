@@ -85,7 +85,7 @@ contains
   type(param), intent(in) :: p
   real(kind=8) :: g, o
   g = gamma(p)
-  o = (1. - 4. * g) * u_old(x, y) + g * (u_old(x + 1, y) + u_old(x - 1, y) + u_old(x, y + 1) + u_old(x, y - 1))
+  o = (1. - 4. * g) * u_old(x, y) + g * (u_old(x, y + 1) + u_old(x, y - 1) + u_old(x - 1, y) + u_old(x + 1, y))
  end function
 
  ! Applies a stencil to a sub-grid of the domain
@@ -100,20 +100,7 @@ contains
   integer :: x, y
   energy = 0
   ! DONE: parallelize with do-concurrent
-  do concurrent(x = g%x_start:g%x_end, y = g%y_start:g%y_end) reduce(+:energy) shared(u_old, u_new)
-    ! Boundary conditions
-    if (x == 2) then
-      u_old(x - 1, y) = 1
-    end if
-    if (x == (p%nx - 1)) then
-      u_old(x + 1, y) = 0
-    end if
-    if (p%rank == 0 .and. y == 2) then
-      u_old(x, y - 1) = 0
-    end if
-    if (p%rank == (p%nranks - 1) .and. y == (p%ny + 1)) then
-      u_old(x, y + 1) = 0
-    end if
+  do concurrent(y = g%y_start:g%y_end, x = g%x_start:g%x_end) reduce(+:energy) shared(u_old, u_new)
     u_new(x, y) = stencil(u_old, x, y, p)
     energy = energy + u_new(x, y) * p%dx * p%dx
   end do
@@ -196,8 +183,13 @@ contains
 
   ! DONE: parallelize with do-concurrent
   do concurrent (x = 1:p%nx, y = 1:p%ny)
-    u_old(x, y) = 0.
-    u_new(x, y) = 0.
+    if (x == 1) then
+      u_old(x, y) = 1.
+      u_new(x, y) = 1.
+    else
+      u_old(x, y) = 0.
+      u_new(x, y) = 0.
+    end if
   end do
  end subroutine
 end module
@@ -210,9 +202,10 @@ program main
 
  real(kind=8), dimension(:,:), allocatable, target :: u_old_, u_new_
  type(param) :: p
- integer :: mt, it, ierr, file, req(3), header_bytes, bytes_per_rank
+ integer :: mt, it, ierr, file, req(3)
  real(kind=8) :: energy_inner, energy_prev, energy_next, energy, t, t1, t2
- integer(kind=8) :: out_sz(2), offset
+ integer(kind=8) :: out_sz(2)
+ integer(kind=MPI_OFFSET_KIND) :: offset, bytes_per_rank, header_bytes
  real(kind=8), dimension(:,:), pointer :: u_old, u_new, u_tmp
 
  call parse_cli(p)
@@ -249,13 +242,14 @@ program main
  t2 = wtime()
  
  if (p%rank == 0) then
-   print *,"Per rank: GB=",(p%nx * p%ny * 2 * 8 * 1e-9),",GB/s=",((p%ni - 1.) * p%nx * p%ny * 2 * 8 * 1e-9)/(t2 - t1)
-   print *,"All rank: GB=",(p%nranks * p%nx * p%ny * 2 * 8 * 1e-9),",GB/s=",((p%ni - 1.) * p%nranks * p%nx * p%ny * 2 * 8 * 1e-9)/(t2 - t1)
+   print *,"Per rank: GB=",((p%nx * p%ny) * 2. * 8. * 1e-9),",GB/s=",(((p%ni - 1.) * p%nx * p%ny) * 2. * 8. * 1e-9)/(t2 - t1)
+   print *,"All rank: GB=",((p%nranks * p%nx * p%ny) * 2. * 8. * 1e-9),",GB/s=",(((p%ni - 1.) * p%nranks * p%nx * p%ny) * 2. * 8. * 1e-9)/(t2 - t1)
  end if
 
  call mpi_file_open(MPI_COMM_WORLD, "output", IOR(MPI_MODE_CREATE, MPI_MODE_WRONLY), MPI_INFO_NULL, file, ierr)
  header_bytes = (2 + 1) * 8
- bytes_per_rank = (p%nx * p%ny) * 8
+ bytes_per_rank = p%nx
+ bytes_per_rank = (bytes_per_rank * p%ny) * 8
  offset = header_bytes + bytes_per_rank * p%nranks
  call mpi_file_set_size(file, offset, ierr)
  req(1) = MPI_REQUEST_NULL

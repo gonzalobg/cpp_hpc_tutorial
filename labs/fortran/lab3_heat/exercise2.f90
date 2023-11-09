@@ -207,9 +207,10 @@ program main
 
  real(kind=8), dimension(:,:), allocatable, target :: u_old_, u_new_
  type(param) :: p
- integer :: mt, it, ierr, file, req(3), header_bytes, bytes_per_rank
+ integer :: mt, it, ierr, file, req(3)
  real(kind=8) :: energy_inner, energy_prev, energy_next, energy, t, t1, t2
- integer(kind=8) :: out_sz(2), offset
+ integer(kind=8) :: out_sz(2)
+ integer(kind=MPI_OFFSET_KIND) :: offset, bytes_per_rank, header_bytes
  real(kind=8), dimension(:,:), pointer :: u_old, u_new, u_tmp
 
  call parse_cli(p)
@@ -253,7 +254,8 @@ program main
 
  call mpi_file_open(MPI_COMM_WORLD, "output", IOR(MPI_MODE_CREATE, MPI_MODE_WRONLY), MPI_INFO_NULL, file, ierr)
  header_bytes = (2 + 1) * 8
- bytes_per_rank = (p%nx * p%ny) * 8
+ bytes_per_rank = p%nx
+ bytes_per_rank = (bytes_per_rank * p%ny) * 8
  offset = header_bytes + bytes_per_rank * p%nranks
  call mpi_file_set_size(file, offset, ierr)
  req(1) = MPI_REQUEST_NULL
