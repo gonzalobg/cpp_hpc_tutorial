@@ -6,13 +6,20 @@ SING_IMG=stdpar_sc.simg
 
 PORT=8888
 
+export CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps
+export CUDA_MPS_LOG_DIRECTORY=/tmp/nvidia-log
+
+
 DOCKER_CMDS="\
   --gpus=all \
   --privileged \
   --ulimit memlock=-1 \
+  --ipc=host \
   -u $(id -u):$(id -g) \
   -h $(hostname) \
   -v $(pwd):/src \
+  -v $CUDA_MPS_PIPE_DIRECTORY:$CUDA_MPS_PIPE_DIRECTORY \
+  -e $CUDA_MPS_PIPE_DIRECTORY \
   -v $(pwd)/conan:/.conan \
   -w /src \
   $DOCKER_IMG \
@@ -28,8 +35,12 @@ SING_CMDS="\
   ${SING_IMG} \
 "
 
-RUN_LAB="source /opt/nvidia/hpc_sdk/Linux_x86_64/23.5/comm_libs/12.1/hpcx/latest/hpcx-mt-init.sh && hpcx_load &&"
-#RUN_LAB="$RUN_LAB source /opt/intel/oneapi/setvars.sh intel64 &&"
+ARCH="x86_64"
+if [ $(dpkg --print-architecture) = "arm64" ]; then
+    ARCH="aarch64"
+fi
+
+RUN_LAB="source /opt/nvidia/hpc_sdk/Linux_${ARCH}/23.9/comm_libs/12.2/hpcx/latest/hpcx-mt-init.sh && hpcx_load &&"
 
 RUN_LAB="$RUN_LAB jupyter-lab \
 --no-browser \
@@ -55,10 +66,19 @@ case $1 in
     docker-build)
 	rm -r target/ || true
 	mkdir -p target
+	#hpccm --recipe=ci/recipe.py | docker build -t ${DOCKER_IMG} -
 	hpccm --recipe=ci/recipe.py > target/Dockerfile
         docker build -t ${DOCKER_IMG} -f target/Dockerfile .
 	;;
     docker-serve)
+	if ! command -v nvidia-cuda-mps-control ; then
+	    echo "nvidia-cuda-mps-control not found => running without mps => multi-gpu performance might be low"
+	else
+	    echo quit | nvidia-cuda-mps-control || true
+	    sleep 1
+	    nvidia-cuda-mps-control -d
+	fi
+	
 	mkdir -p target/local
 	docker run \
 	       -p ${PORT}:${PORT} \

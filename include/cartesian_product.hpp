@@ -2016,7 +2016,6 @@ namespace std::ranges {
 ////////////////////////////////////////////////////////////////////////////////
 // std::ranges::views re-export:
 
-#if __cplusplus <= 202002L
 namespace std {
   namespace ranges {
     using tl::cartesian_product_view;
@@ -2026,4 +2025,3 @@ namespace std {
     } // namespace views
   } // namespace ranges
 } // namespace std
-#endif

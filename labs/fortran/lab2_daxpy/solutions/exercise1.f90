@@ -34,7 +34,7 @@ subroutine daxpy(x, y, n, a)
   ! DONE: parallelize with do-concurrent
   do concurrent (i = 1:n)
     y(i) = y(i) + a * x(i)
-  enddo   
+  end do   
 end subroutine 
 
 ! Get wall clock time
@@ -64,12 +64,13 @@ program main
   read(args,*) niter
 
   allocate(x(n), y(n))
-    
+
+  ! Intialize vectors `x` and `y`
   ! DONE: parallelize with do-concurrent
   do concurrent (i = 1:n)
     x(i)  = i
     y(i)  = 2.
-  enddo
+  end do
 
   ! check solution
   call daxpy(x, y, n, a)
@@ -78,7 +79,7 @@ program main
       print *, "ERROR!",i,x(i),y(i),(a * i + 2.)
       return
     endif
-  enddo
+  end do
   print *, "OK!"
 
   ! benchmark
@@ -86,9 +87,9 @@ program main
   t0 = wtime()
   do i = 1, niter
     call daxpy(x, y, n, a)
-  enddo
+  end do
   t1 = wtime()
     
   c = (3. * n * 8. * niter) / (t1 - t0) * 1e-9
-  print *, c, ' GB/s'
+  print *, (2*n*8*1e-9), ' GB, ', c, ' GB/s'
 end program

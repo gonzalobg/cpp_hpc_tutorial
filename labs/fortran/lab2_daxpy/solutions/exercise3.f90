@@ -21,8 +21,25 @@
 ! DEALINGS IN THE SOFTWARE.
 !
 
-module sm
+module sm 
 contains
+
+! DAXPY: Y + Y + A * X  and sum(Y)
+subroutine daxpy_sum(x, y, n, a, s)
+  use, intrinsic :: iso_fortran_env
+  implicit none
+  real(kind=8), dimension(:) :: x, y
+  real(kind=8) :: a, s
+  integer :: n, i  
+  ! DONE: parallelize using do-concurrent
+  s = 0.
+  do concurrent (i = 1:n) default(none) shared(x, y) local_init(a) reduce(+:s)
+    y(i) = y(i) + a * x(i)
+    s = s + y(i)
+  end do   
+end subroutine
+
+! Get wall clock time
 function wtime() result(t)
   use, intrinsic :: iso_fortran_env
   implicit none
@@ -36,53 +53,49 @@ end module
 program main
   use, intrinsic :: iso_fortran_env
   use sm
-  ! TODO: import cutensorex module
-  ! use cutensorex
   implicit none
-  integer :: ni, nj, nk, niter
-  real(8), allocatable, dimension(:,:) :: a, b, d
-  integer :: i, j, k, it
-  real(kind=REAL64) :: t1, t2, flops
+  real(kind=8), dimension(:), allocatable :: x, y
+  real(kind=8) :: a = 2.0, s = 0.0, s_should = 0.0
+  integer :: n, i, niter
+  real(kind=REAL64) :: t0, t1, c
   character(100) :: args
 
   call get_command_argument(1,args)
-  read(args,*) ni
+  read(args,*) n
   call get_command_argument(2,args)
-  read(args,*) nk
-  call get_command_argument(3,args)
-  read(args,*) nj
-  call get_command_argument(4,args)
   read(args,*) niter
-          
-  allocate(a(ni, nk), b(nk, nj), d(ni, nj))
-  call random_number(a)
-  call random_number(b)
 
-  ! warmup:
-  ! TODO: implement using the matmul intrinsic
-  do j= 1, nj
-    do k= 1, nk
-      do i = 1, ni
-        d(i,j) = a(i,k) * b(k,j)
-      end do      
-    end do
+  allocate(x(n), y(n))
+
+  ! Intialize vectors `x` and `y`
+  do concurrent (i = 1:n) default(none) shared(x, y)
+    x(i)  = i
+    y(i)  = 2.
   end do
-    
-  ! time:
-  print *,"gemm dims ni=",ni," nk=",nk," nj=",nj
+
+  ! check solution
+  call daxpy_sum(x, y, n, a, s)
+  do i = 1, n
+    if (abs(y(i) - (a * i + 2.)) .ge. 1.e-4) then
+      print *, "ERROR!",i,x(i),y(i),(a * i + 2.)
+      return
+    endif
+    s_should = s_should + (a * i + 2.)
+  end do
+  if (abs(s - s_should) .ge. 1.e-4) then
+    print *, "ERROR!",s,s_should
+    return
+  endif
+  print *, "OK!"
+
+  ! benchmark
+  call daxpy_sum(x, y, n, a, s) ! warmup
+  t0 = wtime()
+  do i = 1, niter
+    call daxpy_sum(x, y, n, a, s)
+  end do
   t1 = wtime()
-  do it = 1, niter
-    ! TODO: implement using the matmul intrinsic
-    do i = 1, ni
-      do j= 1, nj
-        do k= 1, nk
-          d(i,j) = d(i,j) + a(i,k) * b(k,j)
-        end do      
-      end do
-    end do
-  end do
-  t2 = wtime()
-
-  flops = 2. * ni * nj * nk * niter / (t2 - t1) * 1e-9
-  print *,"GFLOP/s=",flops
+    
+  c = (3. * n * 8. * niter) / (t1 - t0) * 1e-9
+  print *, (2*n*8*1e-9), ' GB, ', c, ' GB/s'
 end program
