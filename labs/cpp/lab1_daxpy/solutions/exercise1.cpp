@@ -43,12 +43,13 @@ void initialize(std::vector<double> &x, std::vector<double> &y) {
 /// DAXPY: AX + Y: sequential algorithm version
 void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
   assert(x.size() == y.size());
-  // DONE: Implement using:
-  // - std::views::iota(0).begin() to create a iterator over a range of integers starting at zero
-  // - std::for_each_n algorithm (sequential; without execution policies)
+  // DONE: replace this raw loop with an algorithm:
   // for (std::size_t i = 0; i < y.size(); ++i) {
   //   y[i] += a * x[i];
   // }
+  // Using:
+  // - std::views::iota(0).begin() iterator
+  // - std::for_each_n algorithm
   std::for_each_n(std::views::iota(0).begin(), x.size(), [&](int i) {
     y[i] += a * x[i];
   });
@@ -80,7 +81,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  std::cerr << "OK!" << std::endl;
+  std::cerr << "Check: OK, ";
 
   // Measure bandwidth in [GB/s]
   using clk_t = std::chrono::steady_clock;

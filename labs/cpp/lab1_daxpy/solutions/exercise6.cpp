@@ -42,8 +42,8 @@ void initialize(std::vector<double> &x, std::vector<double> &y) {
   std::fill_n(std::execution::par, y.data(), y.size(), 2.);
 }
 
-/// DAXPY: AX + Y: parallel algorithm version
-void daxpy(double a, std::vector<double> &x, std::vector<double> &y, size_t ncols = 1) {
+/// 2D DAXPY: AX + Y: parallel algorithm version
+void daxpy(double a, std::vector<double> &x, std::vector<double> &y, size_t ncols = 2) {
   assert(x.size() == y.size());
   if (x.size() % ncols != 0) { 
       std::cerr << "ERROR: size " << x.size() << " not divisible by " << ncols << std::endl; 
@@ -89,7 +89,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  std::cerr << "OK!" << std::endl;
+  std::cerr << "Check: OK, ";
 
   // Measure bandwidth in [GB/s]
   using clk_t = std::chrono::steady_clock;

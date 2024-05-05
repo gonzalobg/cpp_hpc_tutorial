@@ -31,7 +31,7 @@
 #include <algorithm>
 #include <execution>
 // TODO: add C++ standard library includes as necessary
-// #include <...>
+// #include <numeric>
 
 /// Intialize vectors `x` and `y`: raw loop sequential version
 void initialize(std::vector<double> &x, std::vector<double> &y) {
@@ -46,7 +46,7 @@ void initialize(std::vector<double> &x, std::vector<double> &y) {
 double daxpy_sum(double a, std::vector<double> const &x, std::vector<double> &y) {
   assert(x.size() == y.size());
   auto ints = std::views::iota(0, (int)x.size());
-  // TODO: parallelize using the std::transform_reduce algorithm
+  // TODO: parallelize using the std::transform_reduce algorithm:
   double sum = 0.;
   for (auto i : ints) {
     y[i] += a * x[i];
@@ -81,7 +81,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  std::cerr << "OK!" << std::endl;
+  std::cerr << "Check: OK, ";
 
   // Measure bandwidth in [GB/s]
   using clk_t = std::chrono::steady_clock;

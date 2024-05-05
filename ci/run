@@ -3,6 +3,8 @@ set -ex
 
 DOCKER_IMG=stdpar_sc:dev-latest
 SING_IMG=stdpar_sc.simg
+CPPTUT_NVHPC_VER='24.3'
+CPPTUT_CUDA_VER='12.3'
 
 PORT=8888
 
@@ -40,7 +42,7 @@ if [ $(dpkg --print-architecture) = "arm64" ]; then
     ARCH="aarch64"
 fi
 
-RUN_LAB="source /opt/nvidia/hpc_sdk/Linux_${ARCH}/23.9/comm_libs/12.2/hpcx/latest/hpcx-mt-init.sh && hpcx_load &&"
+RUN_LAB="source /opt/nvidia/hpc_sdk/Linux_${ARCH}/${CPPTUT_NVHPC_VER}/comm_libs/${CPPTUT_CUDA_VER}/hpcx/latest/hpcx-mt-init.sh && hpcx_load &&"
 
 RUN_LAB="$RUN_LAB jupyter-lab \
 --no-browser \

@@ -31,7 +31,6 @@
 #include <algorithm>
 #include <execution>
 #include <mdspan>
-#include <cartesian_product.hpp>
 
 /// Intialize vectors `x` and `y`: parallel algorithm version
 void initialize(std::vector<double> &x, std::vector<double> &y) {
@@ -42,7 +41,7 @@ void initialize(std::vector<double> &x, std::vector<double> &y) {
   std::fill_n(std::execution::par, y.data(), y.size(), 2.);
 }
 
-/// DAXPY: AX + Y: parallel algorithm version
+/// 2D DAXPY: AX + Y: parallel algorithm version
 void daxpy(double a, std::vector<double> &x, std::vector<double> &y, int ncols = 1) {
   assert(x.size() == y.size());
   if (x.size() % ncols != 0) { 
@@ -93,7 +92,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  std::cerr << "OK!" << std::endl;
+  std::cerr << "Check: OK, ";
 
   // Measure bandwidth in [GB/s]
   using clk_t = std::chrono::steady_clock;

@@ -33,23 +33,12 @@
 
 // Select elements and copy them to a new vector
 template<class UnaryPredicate>
-void select(const std::vector<int>& v, UnaryPredicate pred, 
+void select(const std::vector<int>& v, UnaryPredicate pred,
             std::vector<size_t>& index, std::vector<int>& w)
 {
-    // transform_inclusive_scan first filters the data with a "transform" operation
-    // and then computes an inclusive cumulative operation (here a sum).
     index.resize(v.size());
-    std::transform_inclusive_scan(std::execution::par, v.begin(), v.end(), index.begin(), std::plus<size_t>{},
-                                  [pred](int x) { return pred(x) ? 1 : 0; });
-
-    size_t numElem = index.empty() ? 0 : index.back();
-    w.resize(numElem);
-
-    auto ints = std::views::iota(0, (int)v.size());
-    std::for_each(std::execution::par, ints.begin(), ints.end(),
-        [pred, v=v.data(), w=w.data(), index=index.data()](int i) {
-            if (pred(v[i])) w[index[i] - 1] = v[i];
-    });
+    w.resize(v.size());
+    std::copy_if(std::execution::par, v.begin(), v.end(), w.begin(), pred);
 }
 
 // Initialize vector
@@ -77,20 +66,17 @@ int main(int argc, char* argv[])
 
     auto predicate = [](int x) { return x % 3 == 0; };
     std::vector<size_t> index;
-    std::vector<int> w;                       
+    std::vector<int> w;
     select(v, predicate, index, w);
     if (!std::all_of(w.begin(), w.end(), predicate) || w.empty()) {
-        std::cerr << "ERROR!" << std::endl;
-        return 1;
-    }
-    std::cerr << "OK!" << std::endl;
-
-    if (n < 40) {
-        std::cout << "w = ";
-        std::copy(w.begin(), w.end(), std::ostream_iterator<int>(std::cout, " "));
+        std::cerr << "ERROR! ";
+        std::cout << "w[0.." << std::min(10, (int)w.size()) << "] = ";
+        std::copy(w.begin(), w.begin() + std::min(10, (int)w.size()), std::ostream_iterator<int>(std::cout, " "));
         std::cout << std::endl;
+        return EXIT_FAILURE;
     }
-    
+    std::cerr << "Check: OK, ";
+
     bench(v, predicate, index, w);
 
     return 0;
@@ -105,17 +91,16 @@ void initialize(std::vector<int>& v)
 
 template <typename Predicate>
 void bench(std::vector<int>& v, Predicate&& predicate, std::vector<size_t>& index, std::vector<int>& w) {
-  // Measure bandwidth in [GB/s]
-  using clk_t = std::chrono::steady_clock;
-  select(v, predicate, index, w);
-  auto start = clk_t::now();
-  int nit = 100;
-  for (int it = 0; it < nit; ++it) {
+    // Measure bandwidth in [GB/s]
+    using clk_t = std::chrono::steady_clock;
     select(v, predicate, index, w);
-  }
-  auto seconds = std::chrono::duration<double>(clk_t::now() - start).count(); // Duration in [s]
-  // Amount of bytes transferred from/to chip.
-  // v is read (int), written to index (size_t), then v and index are read (int, size_t), and written to w (int):
-  auto gigabytes = (3. * sizeof(int) + 2. * sizeof(size_t)) * (double)v.size() * (double)nit * 1.e-9; // GB
-  std::cerr << "Bandwidth [GB/s]: " << (gigabytes / seconds) << std::endl;
+    auto start = clk_t::now();
+    int nit = 10;
+    for (int it = 0; it < nit; ++it) {
+        select(v, predicate, index, w);
+    }
+    auto seconds = std::chrono::duration<double>(clk_t::now() - start).count(); // Duration in [s]
+    // Bandwith for a memcpy:
+    auto gigabytes = 2. * sizeof(int) * (double)v.size() * 1.e-9; // GB
+    std::cerr << "Problem size: " << gigabytes << " GB, Bandwidth [GB/s]: " << (gigabytes * (double)nit / seconds) << std::endl;
 }

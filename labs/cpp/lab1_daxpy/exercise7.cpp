@@ -41,7 +41,7 @@ void initialize(std::vector<double> &x, std::vector<double> &y) {
   std::fill_n(std::execution::par, y.data(), y.size(), 2.);
 }
 
-/// DAXPY: AX + Y: parallel algorithm version
+/// 2D DAXPY: AX + Y: parallel algorithm version
 void daxpy(double a, std::vector<double> &x, std::vector<double> &y, size_t ncols = 1) {
   assert(x.size() == y.size());
   if (x.size() % ncols != 0) { 
@@ -50,11 +50,13 @@ void daxpy(double a, std::vector<double> &x, std::vector<double> &y, size_t ncol
   }
   size_t nrows = x.size() / ncols;
 
-  // TODO: create a layout_right layout
-  // auto l = std::layout_right::mapping(std::dextents<size_t, 2>(nrows, ncols));
-  // TODO: use the new layout when constructing the mdspans
-  // std::mdspan xs { x.data(), l };
-  // std::mdspan ys { y.data(), l };
+  // TODO: construct extents object.
+  // std::dextents<size_t, 2> extents(nrows, ncols);
+  // TODO: construct the layout mapping object:
+  // auto mapping = std::layout_left::mapping(extents);
+  // TODO: construct the mdspans from the mapping:
+  // std::mdspan xs { x.data(), mapping };
+  // std::mdspan ys { y.data(), mapping };
   std::mdspan xs { x.data(), nrows, ncols };
   std::mdspan ys { y.data(), nrows, ncols };
   std::for_each_n(std::execution::par,
@@ -91,7 +93,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  std::cerr << "OK!" << std::endl;
+  std::cerr << "Check: OK, ";
 
   // Measure bandwidth in [GB/s]
   using clk_t = std::chrono::steady_clock;

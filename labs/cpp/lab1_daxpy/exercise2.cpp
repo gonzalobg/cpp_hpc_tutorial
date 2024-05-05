@@ -30,7 +30,7 @@
 #include <ranges>
 #include <algorithm>
 // TODO: add C++ standard library includes as necessary
-// #include <...>
+// #include <execution>
 
 /// Intialize vectors `x` and `y`: raw loop sequential version
 void initialize(std::vector<double> &x, std::vector<double> &y) {
@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  std::cerr << "OK!" << std::endl;
+  std::cerr << "Check: OK, ";
 
   // Measure bandwidth in [GB/s]
   using clk_t = std::chrono::steady_clock;

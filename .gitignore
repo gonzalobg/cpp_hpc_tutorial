@@ -1,10 +1,10 @@
 target/
 lab2_dataset/
 output*
-labs/lab1_daxpy/daxpy
-labs/lab1_select/select
-labs/lab2_heat/heat
-labs/lab2_heat/heat_equation.png
-labs/lab2_heat/output*
-labs/lab3_tree/tree
-labs/lab3_tree/*.txt
+labs/cpp/lab1_daxpy/daxpy
+labs/cpp/lab1_select/select
+labs/cpp/lab2_heat/heat
+labs/cpp/lab2_heat/heat_equation.png
+labs/cpp/lab2_heat/output*
+labs/cpp/lab3_tree/tree
+labs/cpp/lab3_tree/*.txt

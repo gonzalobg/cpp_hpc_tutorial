@@ -3,10 +3,10 @@ HPCCM development container for the C++ HPC tutorial
 https://github.com/NVIDIA/hpc-container-maker/
 """
 import platform
-nvhpc_ver = '23.9'
-cuda_ver = '12.2'
-gcc_ver = '12'
-llvm_ver = '17'
+nvhpc_ver = '24.3'
+cuda_ver = '12.3'
+gcc_ver = '13'
+llvm_ver = '19'
 cmake_ver = '3.27.2'
 boost_ver = '1.75.0'
 
@@ -25,14 +25,14 @@ Stage0 += packages(ospackages=[
 
 # Install GNU and LLVM toolchains and CMake
 Stage0 += gnu(version=gcc_ver, extra_repository=True)
-Stage0 += llvm(version=llvm_ver, upstream=True, extra_tools=True, toolset=True, _trunk_version='18')
+Stage0 += llvm(version=llvm_ver, upstream=True, extra_tools=True, toolset=True, _trunk_version='19')
 Stage0 += cmake(eula=True, version=cmake_ver)
 
 Stage0 += shell(commands=[
     'set -ex',  # Exit on first error and debug output
 
     # Workaround docker runtime bug that fails to link libnvidia-ml as .so: nvbugs/4248302
-    #'ln -s /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 /usr/lib/x86_64-linux-gnu/libnvidia-ml.so',
+    f'ln -s /usr/lib/{arch}-linux-gnu/libnvidia-ml.so.1 /usr/lib/{arch}-linux-gnu/libnvidia-ml.so',
     
     # Backport libstdc++ ranges bugfix to GCC 12:
     # https://gcc.gnu.org/pipermail/libstdc++/2023-July/056266.html
@@ -44,7 +44,7 @@ Stage0 += shell(commands=[
 
     # Install required python packages for the notebooks
     'pip install --upgrade pip',
-    'pip install numpy matplotlib gdown jupyterlab ipywidgets pandas seaborn conan',
+    'pip install numpy matplotlib gdown jupyterlab ipywidgets pandas seaborn conan jupyterlab-nvidia-nsight',
 
     # Install latest versions of range-v3, NVIDIA std::execution, and NVTX3
     'mkdir -p /var/tmp',
@@ -92,6 +92,13 @@ Stage0 += environment(variables={
 })
 #Stage0 += copy(src='labs/', dest='/labs/')
 Stage0 += copy(src='include/cartesian_product.hpp', dest='/usr/include/cartesian_product.hpp')
+Stage0 += copy(src='include/ranges', dest=f'/usr/include/c++/{gcc_ver}/ranges')
+
+Stage0 += environment(variables={
+    'CPPTUT_NVHPC_VER': nvhpc_ver,
+    'CPPTUT_CUDA_VER': cuda_ver,
+    'CPPTUT_ARCH': arch,
+})
 
 # Install AdaptiveCpp stdpar:
 if False:

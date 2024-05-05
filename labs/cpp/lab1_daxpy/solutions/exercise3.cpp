@@ -45,6 +45,8 @@ void daxpy(double a, std::vector<double> const &x, std::vector<double> &y) {
   assert(x.size() == y.size());
   std::for_each_n(std::execution::par,
                   std::views::iota(0).begin(), x.size(), 
+    // DONE: instead of by reference [&], capture by value using:
+    // [a, x = x.data(), y = y.data()]
     [a, x = x.data(), y = y.data()](int i) {
         y[i] += a * x[i];
   });
@@ -76,7 +78,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  std::cerr << "OK!" << std::endl;
+  std::cerr << "Check: OK, ";
 
   // Measure bandwidth in [GB/s]
   using clk_t = std::chrono::steady_clock;
