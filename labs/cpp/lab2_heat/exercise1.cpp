@@ -23,17 +23,17 @@
 
 //! Solves heat equation in 2D, see the README.
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <execution>
 #include <fstream>
 #include <iostream>
-#include <mpi.h>
-#include <vector>
-#include <cartesian_product.hpp> // NOTE: no longer required in gcc-13
 #include <mdspan>
-// TODO: add C++ standard library includes as necessary
-// #include <...>
-#include <execution>
+#include <mpi.h>
+#include <numeric>
+#include <ranges>
+#include <vector>
 
 using grid_t = std::mdspan<double, std::dextents<std::size_t, 2>, std::layout_right>;
 
@@ -46,7 +46,7 @@ struct parameters {
   static constexpr double alpha() { return 1.0; } // Thermal diffusivity
 
   parameters(int argc, char *argv[]);
-    
+
   long nit() { return ni; }
   long nout() { return 1000; }
   long nx_global() { return nx * nranks; }
@@ -63,12 +63,23 @@ struct grid {
 };
 
 double apply_stencil(grid_t u_new, grid_t u_old, grid g, parameters p) {
-  // TODO: implement using parallel algorithms
+  // TODO Create one iota range per dimension for [g.x_begin,g.x_end) and [g.y_begin,g.y_end).
+  // TODO: Construct a cartesian_product range from the two iota ranges: [g.x_begin,g.x_end)x[g.y_begin,g.y_end).
+  // TODO: Use the std::transform_reduce algorithm to apply the stencil in parallel to each element and sum the energies:
+    // TODO: Use the std::execution::par parallel execution policy
+    // TODO: iterate over the cartesian_product range
+    // TODO: initialize the energy to zero
+    // TODO: use std::plus to sum the energies
+    // TODO: Use a lambda that applies the stencil to one element and returns its energy:
+      // TODO [within lambda]: Extract the 1D indices from the tuple of indices:
+      // TODO [within lambda]: Apply the stencil and return the energy.
+
+  // BEFORE:
   // double energy = 0.;
   // for (long x = g.x_begin; x < g.x_end; ++x) {
-  //   for (long y = g.y_begin; y < g.y_end; ++y) {
-  //     energy += stencil(u_new, u_old, x, y, p);
-  //   }
+  //  for (long y = g.y_begin; y < g.y_end; ++y) {
+  //    energy += stencil(u_new, u_old, x, y, p);
+  //  }
   // }
   // return energy;
   return 0.;
@@ -76,7 +87,8 @@ double apply_stencil(grid_t u_new, grid_t u_old, grid g, parameters p) {
 
 // Initial condition
 void initial_condition(grid_t u_new, grid_t u_old) {
-  // TODO: implement using parallel algorithms
+  // TODO: parallelize using the std::fill_n parallel algorithm
+  // BEFORE:
   // for (long i = 0; i < u_new.size(); ++i) {
   //   u_old.data_handle()[i] = 0.;
   //   u_new.data_handle()[i] = 0.;

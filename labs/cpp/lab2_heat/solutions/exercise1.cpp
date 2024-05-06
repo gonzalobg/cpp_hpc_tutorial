@@ -23,18 +23,17 @@
 
 //! Solves heat equation in 2D, see the README.
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <execution>
 #include <fstream>
 #include <iostream>
-#include <mpi.h>
-#include <vector>
-#include <cartesian_product.hpp> // NOTE: no longer required in gcc-13
 #include <mdspan>
-// DONE: add C++ standard library includes as necessary
-#include <algorithm> // For std::fill_n
-#include <numeric>   // For std::transform_reduce
-#include <execution> // For std::execution::par
+#include <mpi.h>
+#include <numeric>
+#include <ranges>
+#include <vector>
 
 using grid_t = std::mdspan<double, std::dextents<std::size_t, 2>, std::layout_right>;
 
@@ -47,7 +46,7 @@ struct parameters {
   static constexpr double alpha() { return 1.0; } // Thermal diffusivity
 
   parameters(int argc, char *argv[]);
-    
+
   long nit() { return ni; }
   long nout() { return 1000; }
   long nx_global() { return nx * nranks; }
@@ -64,21 +63,33 @@ struct grid {
 };
 
 double apply_stencil(grid_t u_new, grid_t u_old, grid g, parameters p) {
-  // DONE: implement using parallel algorithms
+  // DONE Create one iota range per dimension for [g.x_begin,g.x_end) and [g.y_begin,g.y_end).
   auto xs = std::views::iota(g.x_begin, g.x_end);
   auto ys = std::views::iota(g.y_begin, g.y_end);
+  // DONE: Construct a cartesian_product range from the two iota ranges: [g.x_begin,g.x_end)x[g.y_begin,g.y_end).
   auto ids = std::views::cartesian_product(xs, ys);
+  // DONE: Use the std::transform_reduce algorithm to apply the stencil in parallel to each element and sum the energies:
   return std::transform_reduce(
-    std::execution::par, ids.begin(), ids.end(), 
-    0., std::plus{}, [u_new, u_old, p](auto idx) {
+    // DONE: Use the std::execution::par parallel execution policy
+    std::execution::par,
+    // DONE: iterate over the cartesian_product range
+    ids.begin(), ids.end(),
+    // DONE: initialize the energy to zero
+    0.,
+    // DONE: use std::plus to sum the energies
+    std::plus{},
+    // DONE: Use a lambda that applies the stencil to one element and returns its energy:
+    [u_new, u_old, p](auto idx) {
+      // DONE [within lambda]: Extract the 1D indices from the tuple of indices:
       auto [x, y] = idx;
+      // DONE [within lambda]: Apply the stencil and return the energy.
       return stencil(u_new, u_old, x, y, p);
   });
 }
 
 // Initial condition
 void initial_condition(grid_t u_new, grid_t u_old) {
-  // DONE: implement using parallel algorithms
+  // DONE: parallelize using the std::fill_n parallel algorithm
   std::fill_n(std::execution::par, u_old.data_handle(), u_old.size(), 0.0);
   std::fill_n(std::execution::par, u_new.data_handle(), u_new.size(), 0.0);
 }
@@ -106,7 +117,7 @@ int main(int argc, char *argv[]) {
   std::vector<double> u_new_data(p.n()), u_old_data(p.n());
   grid_t u_new{u_new_data.data(), p.nx+2, p.ny};
   grid_t u_old{u_old_data.data(), p.nx+2, p.ny};
- 
+
   // Initial condition
   initial_condition(u_new, u_old);
 
@@ -133,8 +144,8 @@ int main(int argc, char *argv[]) {
   if (p.rank == 0) {
     std::cerr << "Rank " << p.rank << ": local domain " << p.nx << "x" << p.ny << " (" << grid_size << " GB): " 
               << memory_bw << " GB/s" << std::endl;
-    std::cerr << "All ranks: global domain " << p.nx_global() << "x" << p.ny_global() << " (" << (grid_size * p.nranks) << " GB): " 
-              << memory_bw * p.nranks << " GB/s" << std::endl; 
+    std::cerr << "All ranks: global domain " << p.nx_global() << "x" << p.ny_global() << " (" << (grid_size * p.nranks) << " GB): "
+              << memory_bw * p.nranks << " GB/s" << std::endl;
   }
 
   // Write output to file

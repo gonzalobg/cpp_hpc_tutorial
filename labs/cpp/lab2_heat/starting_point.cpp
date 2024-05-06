@@ -27,10 +27,10 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
-#include <mpi.h>
-#include <vector>
-#include <cartesian_product.hpp> // NOTE: no longer required in gcc-13
 #include <mdspan>
+#include <mpi.h>
+#include <ranges>
+#include <vector>
 
 using grid_t = std::mdspan<double, std::dextents<std::size_t, 2>, std::layout_right>;
 
