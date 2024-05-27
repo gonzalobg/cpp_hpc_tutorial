@@ -6,7 +6,7 @@ import platform
 nvhpc_ver = '24.3'
 cuda_ver = '12.3'
 gcc_ver = '13'
-llvm_ver = '19'
+llvm_ver = '18'
 cmake_ver = '3.27.2'
 boost_ver = '1.75.0'
 
@@ -101,34 +101,19 @@ Stage0 += environment(variables={
 })
 
 # Install AdaptiveCpp stdpar:
-if False:
-  Stage0 += boost(version=boost_ver)
-  Stage0 += shell(commands=[
+Stage0 += boost(version=boost_ver)
+Stage0 += shell(commands=[
     'set -ex',
     'git clone --recurse-submodules -b develop https://github.com/AdaptiveCpp/AdaptiveCpp',
     'cd AdaptiveCpp',
     'git submodule update --recursive',
     f'cmake -Bbuild -H.  -DCMAKE_C_COMPILER="$(which clang-{llvm_ver})" -DCMAKE_CXX_COMPILER="$(which clang++-{llvm_ver})" -DCMAKE_INSTALL_PREFIX=/opt/adaptivecpp  -DWITH_CUDA_BACKEND=ON  -DWITH_CPU_BACKEND=ON',
     'cmake --build build --target install -j $(nproc)',
-  ])
-  # And https://github.com/llvm/llvm-project/issues/57544
-  Stage0 += raw(docker=f'''
-COPY <<EOF /usr/lib/clang/{llvm_ver}/include/cuda_wrappers/bits/shared_ptr_base.h
-// clang/lib/Headers/cuda_wrappers/bits/shared_ptr_base.h
-// installs to /usr/lib/clang/{llvm_ver}/include/cuda_wrappers/bits/shared_ptr_base.h
-
-// CUDA headers define __noinline__ which interferes with libstdc++'s use of
-// `__attribute((__noinline__))`. In order to avoid compilation error,
-// temporarily unset __noinline__ when we include affected libstdc++ header.
-
-#pragma push_macro("__noinline__")
-#undef __noinline__
-#include_next "bits/shared_ptr_base.h"
-
-#pragma pop_macro("__noinline__")
-EOF
-  ''')
-
+])
+Stage0 += environment(variables={
+    'PATH':'$PATH:/opt/adaptivecpp/bin',
+    'ACPP_APPDB_DIR': '/src/',
+})
 
 Stage0 += shell(commands=[
     f'echo "#define MDSPAN_USE_PAREN_OPERATOR 1"|cat - /opt/nvidia/hpc_sdk/Linux_{arch}/{nvhpc_ver}/compilers/include/experimental/mdspan > /tmp/out && mv /tmp/out /opt/nvidia/hpc_sdk/Linux_{arch}/{nvhpc_ver}/compilers/include/experimental/mdspan',
