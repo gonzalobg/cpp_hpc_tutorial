@@ -1427,7 +1427,7 @@ namespace tl  {
         void advance(difference_type n) {
      	    auto idx = linear() + n;
             x_i = idx / (nz * ny) + x_0;
-            y_i = (idx / ny) % nz + y_0;
+            y_i = (idx / nz) % ny + y_0;
 	    z_i = idx % nz + z_0;
 	}
          void next() {
